@@ -601,6 +601,10 @@ export default function App() {
         {/* MAIN */}
         <main className="flex-1 p-6">
           <div className="max-w-5xl mx-auto">
+            {currentPage === 'pricing' && (
+              <Pricing onSelectPlan={(planId) => setCurrentPage('scripts')} darkMode={darkMode} onNavigate={(page) => setCurrentPage(page)} />
+            )}
+
             {currentPage === 'scripts' && (
               <>
                 <div className={`${card} rounded-xl p-8 mb-8 border border-gray-700 shadow-lg`}>
