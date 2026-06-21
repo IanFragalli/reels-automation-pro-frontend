@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Copy, Download, Share2, Heart, Zap, Lock, Crown } from 'lucide-react';
+import { Copy, Download, Share2, Heart, Zap, Lock, Crown, BarChart3, FileText } from 'lucide-react';
+import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { supabase } from './supabaseClient';
 import Auth from './Auth';
 
@@ -17,6 +18,15 @@ export default function App() {
   const [plan, setPlan] = useState('free');
   const [scriptsUsed, setScriptsUsed] = useState(0);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [currentPage, setCurrentPage] = useState('scripts');
+  const [analyticsData, setAnalyticsData] = useState({
+    totalScripts: 0,
+    totalNiches: 0,
+    favoriteCount: 0,
+    nicheData: [],
+    timelineData: [],
+    topNiche: ''
+  });
 
   const PLAN_LIMITS = {
     free: 5,
@@ -36,6 +46,8 @@ export default function App() {
     business: 'from-purple-500 to-purple-600'
   };
 
+  const COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4', '#6366f1'];
+
   useEffect(() => {
     supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user || null);
@@ -48,6 +60,7 @@ export default function App() {
       loadUserPlan();
       loadHistory();
       loadScriptsUsed();
+      loadAnalytics();
     }
   }, [user]);
 
@@ -62,7 +75,6 @@ export default function App() {
       setPlan(data.plan || 'free');
       setScriptsUsed(data.scripts_used || 0);
     } else {
-      // Criar subscrição padrão se não existir
       await supabase.from('user_subscriptions').insert({
         user_id: user.id,
         plan: 'free',
@@ -111,13 +123,71 @@ export default function App() {
     setScriptsUsed(count || 0);
   };
 
+  const loadAnalytics = async () => {
+    try {
+      // Total de scripts
+      const { count: totalCount } = await supabase
+        .from('scripts')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id);
+
+      // Scripts favoritos
+      const { count: favCount } = await supabase
+        .from('scripts')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('is_favorite', true);
+
+      // Todos os scripts para análise
+      const { data: allScripts } = await supabase
+        .from('scripts')
+        .select('niche, created_at, is_favorite')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true });
+
+      if (allScripts && allScripts.length > 0) {
+        // Contar por nicho
+        const nicheCount = {};
+        const timeline = {};
+        allScripts.forEach(script => {
+          nicheCount[script.niche] = (nicheCount[script.niche] || 0) + 1;
+          const date = new Date(script.created_at).toLocaleDateString('pt-BR');
+          timeline[date] = (timeline[date] || 0) + 1;
+        });
+
+        // Transformar para array
+        const nicheData = Object.entries(nicheCount).map(([name, value]) => ({
+          name,
+          value
+        })).sort((a, b) => b.value - a.value);
+
+        const timelineData = Object.entries(timeline).map(([date, count]) => ({
+          date,
+          scripts: count
+        }));
+
+        const topNiche = nicheData[0]?.name || 'N/A';
+
+        setAnalyticsData({
+          totalScripts: totalCount || 0,
+          totalNiches: Object.keys(nicheCount).length,
+          favoriteCount: favCount || 0,
+          nicheData,
+          timelineData,
+          topNiche
+        });
+      }
+    } catch (err) {
+      console.error('Erro ao carregar analytics:', err);
+    }
+  };
+
   const handleGenerate = async () => {
     if (!niche.trim()) {
       setError('Digite um nicho');
       return;
     }
 
-    // Verificar limite
     const limit = PLAN_LIMITS[plan];
     if (scriptsUsed >= limit) {
       setShowUpgradeModal(true);
@@ -166,7 +236,6 @@ export default function App() {
             }
           }
 
-          // Atualizar contador
           await supabase
             .from('user_subscriptions')
             .update({ scripts_used: scriptsUsed + inserted })
@@ -174,6 +243,7 @@ export default function App() {
 
           setScriptsUsed(prev => prev + inserted);
           await loadHistory();
+          await loadAnalytics();
 
           if (inserted < data.scripts.length) {
             setError(`Limite atingido! ${inserted} de ${data.scripts.length} scripts gerados.`);
@@ -232,6 +302,8 @@ export default function App() {
         ? prev.filter(f => f !== scriptTitle)
         : [...prev, scriptTitle]
     );
+
+    await loadAnalytics();
   };
 
   const handleLogout = async () => {
@@ -245,6 +317,8 @@ export default function App() {
   const text = darkMode ? 'text-white' : 'text-gray-900';
   const card = darkMode ? 'bg-gray-800' : 'bg-gray-50';
   const input = darkMode ? 'bg-gray-700 text-white' : 'bg-white text-gray-900 border-gray-300';
+  const chartBg = darkMode ? '#1f2937' : '#ffffff';
+  const chartText = darkMode ? '#ffffff' : '#000000';
 
   if (loading) {
     return (
@@ -293,6 +367,30 @@ export default function App() {
       <div className="flex min-h-screen">
         {/* SIDEBAR */}
         <aside className={`${card} border-r border-gray-700 w-80 p-6 hidden lg:block overflow-y-auto`}>
+          {/* NAV BUTTONS */}
+          <div className="flex gap-2 mb-6">
+            <button
+              onClick={() => setCurrentPage('scripts')}
+              className={`flex-1 py-2 px-3 rounded-lg font-bold text-sm transition flex items-center justify-center gap-2 ${
+                currentPage === 'scripts'
+                  ? 'bg-blue-600 text-white'
+                  : `${card} border border-gray-700 hover:border-gray-600`
+              }`}
+            >
+              <FileText size={16} /> Scripts
+            </button>
+            <button
+              onClick={() => setCurrentPage('analytics')}
+              className={`flex-1 py-2 px-3 rounded-lg font-bold text-sm transition flex items-center justify-center gap-2 ${
+                currentPage === 'analytics'
+                  ? 'bg-blue-600 text-white'
+                  : `${card} border border-gray-700 hover:border-gray-600`
+              }`}
+            >
+              <BarChart3 size={16} /> Analytics
+            </button>
+          </div>
+
           {/* PLANO CARD */}
           <div className={`bg-gradient-to-br ${PLAN_COLORS[plan]} rounded-xl p-6 mb-6 text-white`}>
             <div className="flex items-center justify-between mb-4">
@@ -309,7 +407,6 @@ export default function App() {
               )}
             </div>
 
-            {/* USAGE CARD */}
             <div className="bg-white bg-opacity-20 rounded-lg p-4 mb-4">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-sm font-semibold">Scripts Usados</p>
@@ -327,88 +424,72 @@ export default function App() {
                 {scriptsRemaining} scripts restantes
               </p>
             </div>
-
-            {plan === 'free' && (
-              <div className="text-xs opacity-90 flex items-center gap-2">
-                <Lock size={14} /> Reset mensal: 1º de cada mês
-              </div>
-            )}
           </div>
 
-          {/* FEATURES */}
-          <div className="mb-6">
-            <h4 className="font-bold text-gray-400 text-sm uppercase mb-3">Recursos</h4>
-            <div className="space-y-2 text-sm">
-              <div className="flex items-center gap-2">
-                <span className="text-green-400">✓</span> Gerar scripts
+          {currentPage === 'scripts' ? (
+            <>
+              {/* HISTÓRICO */}
+              <div className="mb-6">
+                <h4 className="font-bold text-gray-400 text-sm uppercase mb-3">Histórico</h4>
+                {history.length === 0 ? (
+                  <p className="text-gray-500 text-sm">Nenhuma busca ainda</p>
+                ) : (
+                  <div className="space-y-2">
+                    {history.map((h, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setNiche(h.niche)}
+                        className={`w-full text-left p-2 rounded transition ${
+                          darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-200'
+                        }`}
+                      >
+                        <p className="font-medium text-sm truncate">{h.niche}</p>
+                        <p className="text-xs text-gray-500">{h.timestamp}</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-              <div className="flex items-center gap-2">
-                <span className={plan !== 'free' ? 'text-green-400' : 'text-gray-500'}>
-                  {plan !== 'free' ? '✓' : '✗'}
-                </span>
-                <span className={plan !== 'free' ? '' : 'line-through opacity-50'}>
-                  Download PDF
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className={plan !== 'free' ? 'text-green-400' : 'text-gray-500'}>
-                  {plan !== 'free' ? '✓' : '✗'}
-                </span>
-                <span className={plan !== 'free' ? '' : 'line-through opacity-50'}>
-                  Analytics básico
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className={plan === 'business' ? 'text-green-400' : 'text-gray-500'}>
-                  {plan === 'business' ? '✓' : '✗'}
-                </span>
-                <span className={plan === 'business' ? '' : 'line-through opacity-50'}>
-                  Agendamento automático
-                </span>
-              </div>
-            </div>
-          </div>
 
-          {/* HISTÓRICO */}
-          <div className="mb-6">
-            <h4 className="font-bold text-gray-400 text-sm uppercase mb-3">Histórico</h4>
-            {history.length === 0 ? (
-              <p className="text-gray-500 text-sm">Nenhuma busca ainda</p>
-            ) : (
-              <div className="space-y-2">
-                {history.map((h, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setNiche(h.niche)}
-                    className={`w-full text-left p-2 rounded transition ${
-                      darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-200'
-                    }`}
-                  >
-                    <p className="font-medium text-sm truncate">{h.niche}</p>
-                    <p className="text-xs text-gray-500">{h.timestamp}</p>
-                  </button>
-                ))}
+              {/* FAVORITOS */}
+              <div className="mb-6">
+                <h4 className="font-bold text-gray-400 text-sm uppercase mb-3">❤️ Favoritos</h4>
+                <p className="text-gray-500 text-sm">{favorites.length} script(s) salvo(s)</p>
               </div>
-            )}
-          </div>
-
-          {/* FAVORITOS */}
-          <div className="mb-6">
-            <h4 className="font-bold text-gray-400 text-sm uppercase mb-3">❤️ Favoritos</h4>
-            <p className="text-gray-500 text-sm">{favorites.length} script(s) salvo(s)</p>
-          </div>
+            </>
+          ) : (
+            <>
+              {/* ANALYTICS STATS */}
+              <div className="space-y-3 mb-6">
+                <div className={`${card} border border-gray-700 rounded-lg p-4`}>
+                  <p className="text-gray-400 text-xs uppercase font-bold mb-1">Total de Scripts</p>
+                  <p className="text-3xl font-bold">{analyticsData.totalScripts}</p>
+                </div>
+                <div className={`${card} border border-gray-700 rounded-lg p-4`}>
+                  <p className="text-gray-400 text-xs uppercase font-bold mb-1">Nichos</p>
+                  <p className="text-3xl font-bold">{analyticsData.totalNiches}</p>
+                </div>
+                <div className={`${card} border border-gray-700 rounded-lg p-4`}>
+                  <p className="text-gray-400 text-xs uppercase font-bold mb-1">Favoritos</p>
+                  <p className="text-3xl font-bold text-red-500">{analyticsData.favoriteCount}</p>
+                </div>
+                <div className={`${card} border border-gray-700 rounded-lg p-4`}>
+                  <p className="text-gray-400 text-xs uppercase font-bold mb-1">Nicho Top</p>
+                  <p className="text-lg font-bold truncate">{analyticsData.topNiche}</p>
+                </div>
+              </div>
+            </>
+          )}
 
           {/* UPGRADE BOX */}
           {plan !== 'business' && (
-            <div
-              className={`bg-gradient-to-br from-purple-900 to-purple-800 rounded-xl p-4 border border-purple-700`}
-            >
+            <div className={`bg-gradient-to-br from-purple-900 to-purple-800 rounded-xl p-4 border border-purple-700`}>
               <div className="flex items-center gap-2 mb-2">
                 <Crown size={18} className="text-yellow-400" />
-                <h4 className="font-bold">Plano Business</h4>
+                <h4 className="font-bold">Business</h4>
               </div>
               <p className="text-xs text-gray-300 mb-3">
-                Scripts ilimitados + agendamento automático + API
+                Ilimitado + agendamento + API
               </p>
               <button
                 onClick={() => setShowUpgradeModal(true)}
@@ -422,158 +503,259 @@ export default function App() {
 
         {/* MAIN */}
         <main className="flex-1 p-6">
-          <div className="max-w-4xl mx-auto">
-            {/* SEARCH */}
-            <div className={`${card} rounded-xl p-8 mb-8 border border-gray-700 shadow-lg`}>
-              <h2 className="text-3xl font-bold mb-2">Scripts Virais com IA</h2>
-              <p className="text-gray-400 mb-6">
-                Gere scripts profissionais em segundos {scriptsRemaining > 0 && `(${scriptsRemaining} restantes)`}
-              </p>
+          <div className="max-w-5xl mx-auto">
+            {currentPage === 'scripts' ? (
+              <>
+                {/* SEARCH */}
+                <div className={`${card} rounded-xl p-8 mb-8 border border-gray-700 shadow-lg`}>
+                  <h2 className="text-3xl font-bold mb-2">Scripts Virais com IA</h2>
+                  <p className="text-gray-400 mb-6">
+                    Gere scripts profissionais em segundos {scriptsRemaining > 0 && `(${scriptsRemaining} restantes)`}
+                  </p>
 
-              <div className="flex gap-3">
-                <input
-                  type="text"
-                  value={niche}
-                  onChange={(e) => setNiche(e.target.value)}
-                  placeholder="Ex: Marketing Digital, Personal Trainer, Beleza..."
-                  className={`flex-1 px-4 py-3 rounded-lg border ${input} focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                  onKeyPress={(e) => e.key === 'Enter' && handleGenerate()}
-                />
-                <button
-                  onClick={handleGenerate}
-                  disabled={appLoading || scriptsRemaining === 0}
-                  className="bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold py-3 px-6 rounded-lg hover:opacity-90 disabled:opacity-50 transition whitespace-nowrap flex items-center gap-2"
-                >
-                  {scriptsRemaining === 0 && <Lock size={18} />}
-                  {appLoading ? '⏳ Gerando...' : '✨ Gerar'}
-                </button>
-              </div>
-
-              {error && (
-                <div className="mt-4 p-3 bg-red-500 bg-opacity-20 border border-red-500 rounded-lg">
-                  <p className="text-red-400 text-sm">{error}</p>
-                </div>
-              )}
-
-              {scriptsRemaining === 0 && (
-                <div className="mt-4 p-4 bg-yellow-500 bg-opacity-20 border border-yellow-500 rounded-lg flex items-start gap-3">
-                  <Zap className="text-yellow-400 flex-shrink-0 mt-1" size={18} />
-                  <div>
-                    <p className="text-yellow-400 font-bold text-sm">Limite atingido!</p>
-                    <p className="text-yellow-300 text-xs mt-1">
-                      Você usou todos os {scriptLimit} scripts do seu plano. Upgrade para continuar gerando.
-                    </p>
+                  <div className="flex gap-3">
+                    <input
+                      type="text"
+                      value={niche}
+                      onChange={(e) => setNiche(e.target.value)}
+                      placeholder="Ex: Marketing Digital, Personal Trainer, Beleza..."
+                      className={`flex-1 px-4 py-3 rounded-lg border ${input} focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                      onKeyPress={(e) => e.key === 'Enter' && handleGenerate()}
+                    />
                     <button
-                      onClick={() => setShowUpgradeModal(true)}
-                      className="mt-2 px-3 py-1 bg-yellow-500 text-gray-900 rounded font-bold text-xs hover:bg-yellow-600 transition"
+                      onClick={handleGenerate}
+                      disabled={appLoading || scriptsRemaining === 0}
+                      className="bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold py-3 px-6 rounded-lg hover:opacity-90 disabled:opacity-50 transition whitespace-nowrap flex items-center gap-2"
                     >
-                      Upgrade Agora
+                      {scriptsRemaining === 0 && <Lock size={18} />}
+                      {appLoading ? '⏳ Gerando...' : '✨ Gerar'}
                     </button>
                   </div>
-                </div>
-              )}
-            </div>
 
-            {/* SCRIPTS */}
-            {scripts.length > 0 && (
-              <div>
-                <h2 className="text-2xl font-bold mb-6">📝 {scripts.length} Scripts Gerados</h2>
-                <div className="space-y-6">
-                  {scripts.map((s, i) => (
-                    <div
-                      key={i}
-                      className={`${card} rounded-xl p-6 border-l-4 border-blue-500 border border-gray-700 shadow-lg hover:shadow-xl transition`}
-                    >
-                      <div className="flex items-start justify-between mb-4">
-                        <div>
-                          <h3 className="text-xl font-bold mb-2">{s.titulo}</h3>
-                          <div className="flex gap-2 flex-wrap">
-                            <span className="px-3 py-1 bg-blue-500 bg-opacity-20 text-blue-300 rounded-full text-xs font-semibold">
-                              ⏱️ {s.duracao}
-                            </span>
-                            <span className="px-3 py-1 bg-green-500 bg-opacity-20 text-green-300 rounded-full text-xs font-semibold">
-                              📈 {s.dificuldade}
-                            </span>
-                          </div>
-                        </div>
+                  {error && (
+                    <div className="mt-4 p-3 bg-red-500 bg-opacity-20 border border-red-500 rounded-lg">
+                      <p className="text-red-400 text-sm">{error}</p>
+                    </div>
+                  )}
+
+                  {scriptsRemaining === 0 && (
+                    <div className="mt-4 p-4 bg-yellow-500 bg-opacity-20 border border-yellow-500 rounded-lg flex items-start gap-3">
+                      <Zap className="text-yellow-400 flex-shrink-0 mt-1" size={18} />
+                      <div>
+                        <p className="text-yellow-400 font-bold text-sm">Limite atingido!</p>
+                        <p className="text-yellow-300 text-xs mt-1">
+                          Você usou todos os {scriptLimit} scripts do seu plano. Upgrade para continuar gerando.
+                        </p>
                         <button
-                          onClick={() => toggleFavorite(s.titulo)}
-                          className="transition hover:scale-110"
+                          onClick={() => setShowUpgradeModal(true)}
+                          className="mt-2 px-3 py-1 bg-yellow-500 text-gray-900 rounded font-bold text-xs hover:bg-yellow-600 transition"
                         >
-                          <Heart
-                            size={24}
-                            fill={favorites.includes(s.titulo) ? 'currentColor' : 'none'}
-                            className={
-                              favorites.includes(s.titulo)
-                                ? 'text-red-500'
-                                : 'text-gray-500 hover:text-red-500'
-                            }
-                          />
-                        </button>
-                      </div>
-
-                      <div className="space-y-4 mb-6">
-                        <div>
-                          <p className="text-xs font-bold text-gray-400 uppercase mb-2">🎯 Gancho (0-3s)</p>
-                          <p className="text-base leading-relaxed mb-2">{s.gancho}</p>
-                          <button
-                            onClick={() => copyToClipboard(s.gancho, `gancho-${i}`)}
-                            className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
-                          >
-                            <Copy size={14} />{' '}
-                            {copied === `gancho-${i}` ? 'Copiado!' : 'Copiar'}
-                          </button>
-                        </div>
-
-                        <div>
-                          <p className="text-xs font-bold text-gray-400 uppercase mb-2">📝 Desenvolvimento</p>
-                          <p className="text-base leading-relaxed mb-2">{s.desenvolvimento}</p>
-                          <button
-                            onClick={() => copyToClipboard(s.desenvolvimento, `dev-${i}`)}
-                            className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
-                          >
-                            <Copy size={14} /> {copied === `dev-${i}` ? 'Copiado!' : 'Copiar'}
-                          </button>
-                        </div>
-
-                        <div>
-                          <p className="text-xs font-bold text-gray-400 uppercase mb-2">📢 Call-to-Action</p>
-                          <p className="text-base font-semibold text-blue-400 mb-2">{s.cta}</p>
-                          <button
-                            onClick={() => copyToClipboard(s.cta, `cta-${i}`)}
-                            className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
-                          >
-                            <Copy size={14} /> {copied === `cta-${i}` ? 'Copiado!' : 'Copiar'}
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="flex gap-3 pt-4 border-t border-gray-700">
-                        <button
-                          onClick={() => downloadScript(s)}
-                          disabled={plan === 'free'}
-                          className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition text-sm font-medium"
-                        >
-                          {plan === 'free' && <Lock size={16} />}
-                          <Download size={18} /> Baixar
-                        </button>
-                        <button
-                          onClick={() => shareScript(s)}
-                          className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 transition text-sm font-medium"
-                        >
-                          <Share2 size={18} /> WhatsApp
+                          Upgrade Agora
                         </button>
                       </div>
                     </div>
-                  ))}
+                  )}
                 </div>
-              </div>
-            )}
 
-            {!scripts.length && !appLoading && (
-              <div className={`${card} rounded-xl p-12 text-center border border-gray-700`}>
-                <p className="text-gray-400 text-lg">📝 Digite um nicho para começar a gerar scripts virais</p>
-              </div>
+                {/* SCRIPTS */}
+                {scripts.length > 0 && (
+                  <div>
+                    <h2 className="text-2xl font-bold mb-6">📝 {scripts.length} Scripts Gerados</h2>
+                    <div className="space-y-6">
+                      {scripts.map((s, i) => (
+                        <div
+                          key={i}
+                          className={`${card} rounded-xl p-6 border-l-4 border-blue-500 border border-gray-700 shadow-lg hover:shadow-xl transition`}
+                        >
+                          <div className="flex items-start justify-between mb-4">
+                            <div>
+                              <h3 className="text-xl font-bold mb-2">{s.titulo}</h3>
+                              <div className="flex gap-2 flex-wrap">
+                                <span className="px-3 py-1 bg-blue-500 bg-opacity-20 text-blue-300 rounded-full text-xs font-semibold">
+                                  ⏱️ {s.duracao}
+                                </span>
+                                <span className="px-3 py-1 bg-green-500 bg-opacity-20 text-green-300 rounded-full text-xs font-semibold">
+                                  📈 {s.dificuldade}
+                                </span>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => toggleFavorite(s.titulo)}
+                              className="transition hover:scale-110"
+                            >
+                              <Heart
+                                size={24}
+                                fill={favorites.includes(s.titulo) ? 'currentColor' : 'none'}
+                                className={
+                                  favorites.includes(s.titulo)
+                                    ? 'text-red-500'
+                                    : 'text-gray-500 hover:text-red-500'
+                                }
+                              />
+                            </button>
+                          </div>
+
+                          <div className="space-y-4 mb-6">
+                            <div>
+                              <p className="text-xs font-bold text-gray-400 uppercase mb-2">🎯 Gancho (0-3s)</p>
+                              <p className="text-base leading-relaxed mb-2">{s.gancho}</p>
+                              <button
+                                onClick={() => copyToClipboard(s.gancho, `gancho-${i}`)}
+                                className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                              >
+                                <Copy size={14} />{' '}
+                                {copied === `gancho-${i}` ? 'Copiado!' : 'Copiar'}
+                              </button>
+                            </div>
+
+                            <div>
+                              <p className="text-xs font-bold text-gray-400 uppercase mb-2">📝 Desenvolvimento</p>
+                              <p className="text-base leading-relaxed mb-2">{s.desenvolvimento}</p>
+                              <button
+                                onClick={() => copyToClipboard(s.desenvolvimento, `dev-${i}`)}
+                                className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                              >
+                                <Copy size={14} /> {copied === `dev-${i}` ? 'Copiado!' : 'Copiar'}
+                              </button>
+                            </div>
+
+                            <div>
+                              <p className="text-xs font-bold text-gray-400 uppercase mb-2">📢 Call-to-Action</p>
+                              <p className="text-base font-semibold text-blue-400 mb-2">{s.cta}</p>
+                              <button
+                                onClick={() => copyToClipboard(s.cta, `cta-${i}`)}
+                                className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                              >
+                                <Copy size={14} /> {copied === `cta-${i}` ? 'Copiado!' : 'Copiar'}
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="flex gap-3 pt-4 border-t border-gray-700">
+                            <button
+                              onClick={() => downloadScript(s)}
+                              disabled={plan === 'free'}
+                              className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition text-sm font-medium"
+                            >
+                              {plan === 'free' && <Lock size={16} />}
+                              <Download size={18} /> Baixar
+                            </button>
+                            <button
+                              onClick={() => shareScript(s)}
+                              className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 transition text-sm font-medium"
+                            >
+                              <Share2 size={18} /> WhatsApp
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {!scripts.length && !appLoading && (
+                  <div className={`${card} rounded-xl p-12 text-center border border-gray-700`}>
+                    <p className="text-gray-400 text-lg">📝 Digite um nicho para começar a gerar scripts virais</p>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                {/* ANALYTICS PAGE */}
+                <h2 className="text-3xl font-bold mb-8">📊 Analytics Dashboard</h2>
+
+                {analyticsData.totalScripts > 0 ? (
+                  <div className="space-y-8">
+                    {/* STATS CARDS */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div className={`${card} rounded-xl p-6 border border-gray-700`}>
+                        <p className="text-gray-400 text-sm uppercase font-bold mb-2">Total Scripts</p>
+                        <p className="text-4xl font-bold">{analyticsData.totalScripts}</p>
+                      </div>
+                      <div className={`${card} rounded-xl p-6 border border-gray-700`}>
+                        <p className="text-gray-400 text-sm uppercase font-bold mb-2">Nichos</p>
+                        <p className="text-4xl font-bold">{analyticsData.totalNiches}</p>
+                      </div>
+                      <div className={`${card} rounded-xl p-6 border border-gray-700`}>
+                        <p className="text-gray-400 text-sm uppercase font-bold mb-2">Favoritos</p>
+                        <p className="text-4xl font-bold text-red-500">{analyticsData.favoriteCount}</p>
+                      </div>
+                      <div className={`${card} rounded-xl p-6 border border-gray-700`}>
+                        <p className="text-gray-400 text-sm uppercase font-bold mb-2">Nicho Top</p>
+                        <p className="text-2xl font-bold truncate">{analyticsData.topNiche}</p>
+                      </div>
+                    </div>
+
+                    {/* CHARTS */}
+                    {analyticsData.nicheData.length > 0 && (
+                      <div className={`${card} rounded-xl p-6 border border-gray-700`}>
+                        <h3 className="text-xl font-bold mb-4">Scripts por Nicho</h3>
+                        <ResponsiveContainer width="100%" height={300}>
+                          <PieChart>
+                            <Pie
+                              data={analyticsData.nicheData}
+                              cx="50%"
+                              cy="50%"
+                              labelLine={false}
+                              label={({ name, value }) => `${name}: ${value}`}
+                              outerRadius={80}
+                              fill="#8884d8"
+                              dataKey="value"
+                            >
+                              {analyticsData.nicheData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                              ))}
+                            </Pie>
+                            <Tooltip />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+
+                    {analyticsData.timelineData.length > 0 && (
+                      <div className={`${card} rounded-xl p-6 border border-gray-700`}>
+                        <h3 className="text-xl font-bold mb-4">Evolução ao Longo do Tempo</h3>
+                        <ResponsiveContainer width="100%" height={300}>
+                          <LineChart data={analyticsData.timelineData}>
+                            <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#4b5563' : '#e5e7eb'} />
+                            <XAxis dataKey="date" stroke={chartText} />
+                            <YAxis stroke={chartText} />
+                            <Tooltip contentStyle={{ backgroundColor: chartBg, border: '1px solid #666' }} />
+                            <Legend />
+                            <Line
+                              type="monotone"
+                              dataKey="scripts"
+                              stroke="#3b82f6"
+                              strokeWidth={2}
+                              dot={{ fill: '#3b82f6' }}
+                              activeDot={{ r: 6 }}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+
+                    {analyticsData.nicheData.length > 0 && (
+                      <div className={`${card} rounded-xl p-6 border border-gray-700`}>
+                        <h3 className="text-xl font-bold mb-4">Ranking de Nichos</h3>
+                        <ResponsiveContainer width="100%" height={300}>
+                          <BarChart data={analyticsData.nicheData}>
+                            <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#4b5563' : '#e5e7eb'} />
+                            <XAxis dataKey="name" stroke={chartText} />
+                            <YAxis stroke={chartText} />
+                            <Tooltip contentStyle={{ backgroundColor: chartBg, border: '1px solid #666' }} />
+                            <Bar dataKey="value" fill="#8b5cf6" radius={[8, 8, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className={`${card} rounded-xl p-12 text-center border border-gray-700`}>
+                    <p className="text-gray-400 text-lg">📊 Nenhum dados ainda. Gere alguns scripts para ver as estatísticas!</p>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </main>
@@ -588,7 +770,6 @@ export default function App() {
             </h2>
 
             <div className="grid grid-cols-3 gap-4 mb-8">
-              {/* FREE */}
               <div
                 className={`rounded-lg p-6 border-2 transition cursor-pointer ${
                   plan === 'free'
@@ -606,7 +787,6 @@ export default function App() {
                 {plan === 'free' && <p className="text-blue-400 text-sm font-bold">Seu plano atual</p>}
               </div>
 
-              {/* PRO */}
               <div
                 className={`rounded-lg p-6 border-2 transition cursor-pointer ${
                   plan === 'pro'
@@ -631,7 +811,6 @@ export default function App() {
                 )}
               </div>
 
-              {/* BUSINESS */}
               <div
                 className={`rounded-lg p-6 border-2 transition cursor-pointer ${
                   plan === 'business'
@@ -644,8 +823,8 @@ export default function App() {
                   R$ 149<span className="text-sm">/mês</span>
                 </p>
                 <div className="space-y-2 text-sm mb-4">
-                  <p>✓ Scripts ilimitados</p>
-                  <p>✓ Agendamento automático</p>
+                  <p>✓ Ilimitado</p>
+                  <p>✓ Agendamento</p>
                   <p>✓ API access</p>
                 </div>
                 {plan === 'business' && <p className="text-purple-400 text-sm font-bold">Seu plano atual</p>}
