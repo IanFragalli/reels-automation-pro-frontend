@@ -1,14 +1,78 @@
 import { useState, useEffect } from 'react';
-import { Copy, Download, Share2, Heart, Zap, Lock, Crown, BarChart3, FileText, Settings, LogOut, Mail, Key, Trash2, AlertCircle, Loader } from 'lucide-react';
+import { Copy, Download, Share2, Heart, Zap, Lock, Crown, BarChart3, FileText, Settings, LogOut, Mail, Key, Trash2, AlertCircle, Loader, ExternalLink, Clock, Tag } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { supabase } from './supabaseClient';
 import Auth from './Auth';
 import Pricing from './Pricing';
+import ProfileSetup from './ProfileSetup';
 import Admin from './Admin';
+
+const PRICING_PLANS = {
+  free: {
+    name: 'Free',
+    emoji: '🎁',
+    price: 'R$ 0',
+    period: 'Para sempre',
+    credits: 5,
+    color: 'from-gray-500 to-gray-600',
+    features: [
+      { text: '5 scripts/mês', included: true },
+      { text: 'Hashtags básicas (2)', included: true },
+      { text: 'Histórico', included: true },
+      { text: 'Download', included: false },
+      { text: 'URLs de referência', included: false },
+      { text: 'Estimativa de tempo', included: false }
+    ]
+  },
+  premium: {
+    name: 'Premium',
+    emoji: '⭐',
+    price: 'R$ 49',
+    period: '/mês',
+    credits: 60,
+    color: 'from-blue-500 to-blue-600',
+    highlight: true,
+    features: [
+      { text: '60 scripts/mês', included: true },
+      { text: 'Hashtags de alto engajamento', included: true },
+      { text: 'URLs de referência (Instagram/YouTube/TikTok)', included: true },
+      { text: 'Download completo', included: true },
+      { text: 'Estimativa de tempo de vídeo', included: true },
+      { text: 'Analytics avançado', included: true }
+    ]
+  },
+  top: {
+    name: 'Top',
+    emoji: '👑',
+    price: 'R$ 149',
+    period: '/mês',
+    credits: 250,
+    color: 'from-purple-500 to-purple-600',
+    features: [
+      { text: '250 scripts/mês', included: true },
+      { text: 'Hashtags de alto engajamento', included: true },
+      { text: 'URLs de referência premium', included: true },
+      { text: 'Download ilimitado', included: true },
+      { text: 'Estimativa de tempo exata', included: true },
+      { text: 'Analytics completo + IA insights', included: true }
+    ]
+  }
+};
+
+const PLAN_LIMITS = {
+  free: 5,
+  premium: 60,
+  top: 250
+};
+
+const COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4', '#6366f1'];
 
 export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [userProfile, setUserProfile] = useState(null);
+  const [showProfileSetup, setShowProfileSetup] = useState(false);
+  
   const [niche, setNiche] = useState('');
   const [scripts, setScripts] = useState([]);
   const [appLoading, setAppLoading] = useState(false);
@@ -19,13 +83,10 @@ export default function App() {
   const [darkMode, setDarkMode] = useState(true);
   const [copied, setCopied] = useState(null);
   const [plan, setPlan] = useState('free');
-  const [scriptsUsed, setScriptsUsed] = useState(0);
+  const [creditsUsed, setCreditsUsed] = useState(0);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [currentPage, setCurrentPage] = useState('scripts');
-  const [userProfile, setUserProfile] = useState({
-    email: '',
-    user_metadata: { full_name: '' }
-  });
+  
   const [settingsForm, setSettingsForm] = useState({
     fullName: '',
     newPassword: '',
@@ -33,6 +94,7 @@ export default function App() {
   });
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState('');
+  
   const [analyticsData, setAnalyticsData] = useState({
     totalScripts: 0,
     totalNiches: 0,
@@ -43,27 +105,6 @@ export default function App() {
   });
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
-  const PLAN_LIMITS = {
-    free: 5,
-    pro: 50,
-    business: 999999
-  };
-
-  const PLAN_NAMES = {
-    free: 'Free',
-    pro: 'Pro',
-    business: 'Business'
-  };
-
-  const PLAN_COLORS = {
-    free: 'from-gray-500 to-gray-600',
-    pro: 'from-blue-500 to-blue-600',
-    business: 'from-purple-500 to-purple-600'
-  };
-
-  const COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4', '#6366f1'];
-
-  // Admin check
   const isAdmin = user?.email === 'ianfragalli@hotmail.com';
 
   // Auto-clear messages
@@ -82,54 +123,78 @@ export default function App() {
   }, [success]);
 
   useEffect(() => {
-    supabase.auth.onAuthStateChange((event, session) => {
+    const unsubscribe = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user || null);
       if (session?.user) {
-        setUserProfile(session.user);
         setSettingsForm({
           fullName: session.user.user_metadata?.full_name || '',
           newPassword: '',
           confirmPassword: ''
         });
+        loadUserProfile(session.user.id);
       }
       setLoading(false);
     });
+
+    return () => unsubscribe?.unsubscribe();
   }, []);
 
   useEffect(() => {
     if (user) {
       if (isAdmin) {
-        setPlan('business');
-        setScriptsUsed(0);
+        setPlan('top');
+        setCreditsUsed(0);
       } else {
         loadUserPlan();
       }
       loadHistory();
-      loadScriptsUsed();
+      loadCreditsUsed();
       loadAnalytics();
     }
   }, [user, isAdmin]);
+
+  const loadUserProfile = async (userId) => {
+    try {
+      const { data, error: err } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      if (err && err.code !== 'PGRST116') {
+        console.error('Erro ao carregar perfil:', err);
+        setShowProfileSetup(true);
+      } else if (data) {
+        setUserProfile(data);
+      } else {
+        setShowProfileSetup(true);
+      }
+    } catch (err) {
+      console.error('Erro ao carregar perfil:', err);
+      setShowProfileSetup(true);
+    }
+  };
 
   const loadUserPlan = async () => {
     try {
       const { data } = await supabase
         .from('user_subscriptions')
-        .select('plan, scripts_used')
+        .select('plan, credits_used')
         .eq('user_id', user.id)
         .single();
 
       if (data) {
         setPlan(data.plan || 'free');
-        setScriptsUsed(data.scripts_used || 0);
+        setCreditsUsed(data.credits_used || 0);
       } else {
         await supabase.from('user_subscriptions').insert({
           user_id: user.id,
           plan: 'free',
-          scripts_limit: 5,
-          scripts_used: 0
+          credits_limit: 5,
+          credits_used: 0
         });
         setPlan('free');
-        setScriptsUsed(0);
+        setCreditsUsed(0);
       }
     } catch (err) {
       console.error('Erro ao carregar plano:', err);
@@ -164,16 +229,16 @@ export default function App() {
     }
   };
 
-  const loadScriptsUsed = async () => {
+  const loadCreditsUsed = async () => {
     try {
       const { count } = await supabase
         .from('scripts')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', user.id);
 
-      setScriptsUsed(count || 0);
+      setCreditsUsed(count || 0);
     } catch (err) {
-      console.error('Erro ao contar scripts:', err);
+      console.error('Erro ao contar créditos:', err);
     }
   };
 
@@ -234,6 +299,70 @@ export default function App() {
     }
   };
 
+  const generateHashtags = (scriptTitle, plan) => {
+    // Hashtags básicas (Free)
+    const basicHashtags = ['#ReelFlow', '#IA'];
+    
+    if (plan === 'free') {
+      return basicHashtags;
+    }
+
+    // Hashtags de alto engajamento (Premium/Top)
+    const keywords = scriptTitle.toLowerCase().split(' ');
+    const hashtagMap = {
+      'marketing': ['#MarketingDigital', '#EstrategiaDeMarketing'],
+      'beleza': ['#BeautifulMakeup', '#SkinCare'],
+      'fitness': ['#FitnessMotivation', '#WorkoutOfTheDay'],
+      'tech': ['#TechTrends', '#Inovação'],
+      'educação': ['#EducaçãoOnline', '#Aprendizado'],
+      'culinária': ['#CulináriaArtesanal', '#ReceitaFácil'],
+      'moda': ['#FashionTrend', '#StyleInspo'],
+      'viagem': ['#ViajarPelaMundo', '#TravelBlog'],
+      'lifestyle': ['#LifestyleBlog', '#DailyLife']
+    };
+
+    let recommendedHashtags = [...basicHashtags];
+    for (const keyword of keywords) {
+      if (hashtagMap[keyword]) {
+        recommendedHashtags = [...recommendedHashtags, ...hashtagMap[keyword]];
+        break;
+      }
+    }
+
+    return recommendedHashtags.slice(0, 10);
+  };
+
+  const generateReferenceURLs = (scriptTitle, plan) => {
+    if (plan === 'free') {
+      return [];
+    }
+
+    // URLs de exemplo (você pode integrar uma API real aqui)
+    const referenceURLs = {
+      instagram: 'https://instagram.com/explore/tags/' + scriptTitle.replace(/\s+/g, ''),
+      youtube: 'https://youtube.com/search?q=' + scriptTitle,
+      tiktok: 'https://www.tiktok.com/search?q=' + scriptTitle
+    };
+
+    return Object.entries(referenceURLs).map(([platform, url]) => ({
+      platform,
+      url,
+      emoji: platform === 'instagram' ? '📷' : platform === 'youtube' ? '🎥' : '🎵'
+    }));
+  };
+
+  const estimateVideoDuration = (script, plan) => {
+    if (plan === 'free') {
+      return '3-15 segundos (recomendado)';
+    }
+
+    // Estimativa baseada no comprimento do texto
+    const totalChars = script.gancho.length + script.desenvolvimento.length + script.cta.length;
+    const estimatedSeconds = Math.ceil(totalChars / 10);
+    
+    return `${Math.min(3, estimatedSeconds)}-${Math.max(15, estimatedSeconds)} segundos`;
+  };
+
   const handleGenerateScripts = async () => {
     if (!niche.trim()) {
       setError('Por favor, digite um nicho');
@@ -242,7 +371,7 @@ export default function App() {
 
     if (!isAdmin) {
       const limit = PLAN_LIMITS[plan];
-      if (scriptsUsed >= limit) {
+      if (creditsUsed >= limit) {
         setShowUpgradeModal(true);
         setError(`Limite atingido! Você tem ${limit} scripts/mês`);
         return;
@@ -254,24 +383,39 @@ export default function App() {
     setSuccess('');
 
     try {
+      const userContext = userProfile ? `Contexto do usuário: Interesse em ${userProfile.interests?.join(', ')} | Cidade: ${userProfile.city}` : '';
+      
       const response = await fetch('https://reels-automation-pro.vercel.app/api/generate-scripts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userData: { niche } })
+        body: JSON.stringify({ 
+          userData: { 
+            niche,
+            userContext
+          }
+        })
       });
 
       const data = await response.json();
 
       if (data.success && data.scripts && data.scripts.length > 0) {
-        setScripts(data.scripts);
-        setSuccess(`✨ ${data.scripts.length} scripts gerados com sucesso!`);
+        // Enriquecer scripts com hashtags, URLs e duração
+        const enrichedScripts = data.scripts.map(script => ({
+          ...script,
+          hashtags: generateHashtags(script.titulo, plan),
+          reference_urls: generateReferenceURLs(script.titulo, plan),
+          video_duration: estimateVideoDuration(script, plan)
+        }));
+
+        setScripts(enrichedScripts);
+        setSuccess(`✨ ${enrichedScripts.length} scripts gerados com sucesso!`);
 
         if (user) {
           let inserted = 0;
           const limit = isAdmin ? 999999 : PLAN_LIMITS[plan];
           
-          for (const script of data.scripts) {
-            if (scriptsUsed + inserted >= limit) break;
+          for (const script of enrichedScripts) {
+            if (creditsUsed + inserted >= limit) break;
 
             const { error: insertError } = await supabase
               .from('scripts')
@@ -285,6 +429,9 @@ export default function App() {
                   cta: script.cta,
                   duracao: script.duracao,
                   dificuldade: script.dificuldade,
+                  hashtags: script.hashtags,
+                  video_duration: script.video_duration,
+                  reference_urls: script.reference_urls,
                   is_favorite: false
                 }
               ]);
@@ -297,11 +444,11 @@ export default function App() {
           if (!isAdmin) {
             await supabase
               .from('user_subscriptions')
-              .update({ scripts_used: scriptsUsed + inserted })
+              .update({ credits_used: creditsUsed + inserted })
               .eq('user_id', user.id);
           }
 
-          setScriptsUsed(prev => prev + inserted);
+          setCreditsUsed(prev => prev + inserted);
           await loadHistory();
           await loadAnalytics();
         }
@@ -323,7 +470,7 @@ export default function App() {
     try {
       let updated = false;
 
-      if (settingsForm.fullName !== userProfile.user_metadata?.full_name) {
+      if (settingsForm.fullName !== user.user_metadata?.full_name) {
         const { error } = await supabase.auth.updateUser({
           data: { full_name: settingsForm.fullName }
         });
@@ -363,7 +510,7 @@ export default function App() {
   };
 
   const handleDeleteAccount = async () => {
-    if (!window.confirm('⚠️ Tem CERTEZA? Isso vai deletar TUDO permanentemente!\n\nDigite a confirmação')) {
+    if (!window.confirm('⚠️ Tem CERTEZA? Isso vai deletar TUDO permanentemente!')) {
       return;
     }
 
@@ -371,6 +518,7 @@ export default function App() {
 
     try {
       await supabase.from('scripts').delete().eq('user_id', user.id);
+      await supabase.from('user_profiles').delete().eq('user_id', user.id);
       await supabase.from('user_subscriptions').delete().eq('user_id', user.id);
       
       const { error } = await supabase.auth.admin.deleteUser(user.id);
@@ -399,7 +547,13 @@ export default function App() {
       return;
     }
 
-    const text = `SCRIPT: ${script.titulo}\n\nGANCHO:\n${script.gancho}\n\nDESENVOLVIMENTO:\n${script.desenvolvimento}\n\nCTA:\n${script.cta}\n\nDURAÇÃO: ${script.duracao}\nDIFICULDADE: ${script.dificuldade}`;
+    const hashtags = script.hashtags?.join(' ') || '';
+    const references = script.reference_urls?.length > 0 
+      ? '\n\nREFERÊNCIAS:\n' + script.reference_urls.map(r => `${r.emoji} ${r.platform}: ${r.url}`).join('\n')
+      : '';
+
+    const text = `SCRIPT: ${script.titulo}\n\nGANCHO:\n${script.gancho}\n\nDESENVOLVIMENTO:\n${script.desenvolvimento}\n\nCTA:\n${script.cta}\n\nHASTAGS:\n${hashtags}\n\nDURAÇÃO: ${script.video_duration || script.duracao}\nDIFICULDADE: ${script.dificuldade}${references}`;
+    
     const blob = new Blob([text], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -410,7 +564,8 @@ export default function App() {
   };
 
   const shareScript = (script) => {
-    const text = `${script.titulo}\n\n${script.gancho}`;
+    const hashtags = script.hashtags?.join(' ') || '';
+    const text = `${script.titulo}\n\n${script.gancho}\n\n${hashtags}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
@@ -446,77 +601,105 @@ export default function App() {
     setCurrentPage('scripts');
   };
 
-  const bg = darkMode ? 'bg-gray-900' : 'bg-white';
+  // Cores refinadas
+  const bg = darkMode 
+    ? 'bg-gray-900' 
+    : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50';
   const text = darkMode ? 'text-white' : 'text-gray-900';
-  const card = darkMode ? 'bg-gray-800' : 'bg-gray-50';
-  const input = darkMode ? 'bg-gray-700 text-white border-gray-600' : 'bg-white text-gray-900 border-gray-300';
+  const card = darkMode 
+    ? 'bg-gray-800' 
+    : 'bg-white shadow-sm';
+  const input = darkMode 
+    ? 'bg-gray-700 text-white border-gray-600' 
+    : 'bg-blue-50 text-gray-900 border-blue-200';
   const chartBg = darkMode ? '#1f2937' : '#ffffff';
   const chartText = darkMode ? '#ffffff' : '#000000';
 
   if (loading) {
     return (
       <div className={`${bg} ${text} min-h-screen flex flex-col items-center justify-center gap-4`}>
+        <div className="text-6xl animate-bounce">🎬</div>
         <Loader size={40} className="animate-spin text-blue-500" />
-        <p className="text-lg font-semibold">Carregando...</p>
+        <p className="text-lg font-semibold">Carregando ReelFlow...</p>
       </div>
     );
   }
 
   if (!user) {
-    if (currentPage === 'pricing') {
-      return <Pricing onSelectPlan={(planId) => setCurrentPage('scripts')} darkMode={darkMode} onNavigate={(page) => setCurrentPage(page)} />;
-    }
     return <Auth onAuthSuccess={() => setUser(true)} />;
+  }
+
+  if (showProfileSetup && !userProfile) {
+    return (
+      <ProfileSetup 
+        user={user} 
+        darkMode={darkMode} 
+        onComplete={() => {
+          loadUserProfile(user.id);
+          setShowProfileSetup(false);
+        }} 
+      />
+    );
   }
 
   if (isAdmin && currentPage === 'admin') {
     return <Admin user={user} darkMode={darkMode} onLogout={handleLogout} />;
   }
 
-  const scriptLimit = PLAN_LIMITS[plan];
-  const scriptPercentage = isAdmin ? 100 : (scriptsUsed / scriptLimit) * 100;
-  const scriptsRemaining = isAdmin ? '∞' : Math.max(0, scriptLimit - scriptsUsed);
+  const creditLimit = PLAN_LIMITS[plan];
+  const creditPercentage = isAdmin ? 100 : (creditsUsed / creditLimit) * 100;
+  const creditsRemaining = isAdmin ? '∞' : Math.max(0, creditLimit - creditsUsed);
 
   return (
     <div className={`${bg} ${text} min-h-screen transition-colors duration-300`}>
       {/* HEADER */}
-      <header className={`${card} border-b border-gray-700 sticky top-0 z-40 backdrop-blur-sm`}>
+      <header className={`${card} border-b ${darkMode ? 'border-gray-700' : 'border-blue-100'} sticky top-0 z-40 backdrop-blur-md bg-opacity-95`}>
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-4 flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-2">
-            <div className="text-3xl">🎬</div>
-            <h1 className="text-xl md:text-2xl font-black">Reels AI Pro</h1>
-          </div>
-          <div className="flex items-center gap-2 md:gap-4 flex-wrap justify-end">
-            <div className={`px-3 md:px-4 py-2 rounded-lg bg-gradient-to-r ${isAdmin ? 'from-yellow-500 to-yellow-600' : PLAN_COLORS[plan]} text-white text-xs md:text-sm font-bold transition-all`}>
-              {isAdmin ? '👑 ADMIN' : plan === 'free' ? '🟢 FREE' : plan === 'pro' ? '🔵 PRO' : '🟣 BUSINESS'}
+          <div className="flex items-center gap-3">
+            <div className="text-4xl">🎬</div>
+            <div>
+              <h1 className="text-2xl md:text-3xl font-black bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
+                ReelFlow
+              </h1>
+              <p className="text-xs text-gray-500">Scripts virais com IA</p>
             </div>
+          </div>
+
+          <div className="flex items-center gap-2 md:gap-4 flex-wrap justify-end">
+            <div className={`px-3 md:px-4 py-2 rounded-full bg-gradient-to-r ${PRICING_PLANS[plan].color} text-white text-xs md:text-sm font-bold transition-all`}>
+              {PRICING_PLANS[plan].emoji} {PRICING_PLANS[plan].name}
+            </div>
+
             {isAdmin && (
               <button
                 onClick={() => setCurrentPage('admin')}
-                className="px-3 py-2 text-xs md:text-sm font-bold bg-purple-700 hover:bg-purple-600 rounded-lg transition transform hover:scale-105"
-                title="Painel Admin"
+                className="px-3 py-2 text-xs md:text-sm font-bold bg-yellow-600 hover:bg-yellow-700 rounded-full transition transform hover:scale-105"
               >
-                👑
+                👑 Admin
               </button>
             )}
+
             <button
               onClick={() => setCurrentPage('pricing')}
-              className="px-3 py-2 text-xs md:text-sm font-bold bg-gray-700 hover:bg-gray-600 rounded-lg transition transform hover:scale-105"
-              title="Planos"
+              className="px-3 py-2 text-xs md:text-sm font-bold rounded-full transition transform hover:scale-105"
+              style={{
+                background: darkMode ? '#4b5563' : '#e0e7ff',
+                color: darkMode ? '#fff' : '#1e40af'
+              }}
             >
               💳
             </button>
+
             <button
               onClick={() => setDarkMode(!darkMode)}
-              className="p-2 rounded-lg bg-gray-700 hover:bg-gray-600 transition transform hover:scale-110"
-              title={darkMode ? 'Modo claro' : 'Modo escuro'}
+              className={`p-2 rounded-full transition transform hover:scale-110 ${darkMode ? 'bg-gray-700' : 'bg-blue-100'}`}
             >
               {darkMode ? '☀️' : '🌙'}
             </button>
+
             <button
               onClick={handleLogout}
-              className="px-3 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-xs md:text-sm font-bold transition transform hover:scale-105 flex items-center gap-1"
-              title="Sair"
+              className="px-3 py-2 bg-red-600 hover:bg-red-700 rounded-full text-xs md:text-sm font-bold transition transform hover:scale-105 flex items-center gap-1"
             >
               <LogOut size={16} className="hidden md:block" /> Sair
             </button>
@@ -524,9 +707,9 @@ export default function App() {
         </div>
       </header>
 
-      <div className="flex min-h-screen flex-col md:flex-row">
+      <div className="flex min-h-screen flex-col lg:flex-row">
         {/* SIDEBAR */}
-        <aside className={`${card} border-b md:border-r border-gray-700 w-full md:w-80 p-4 md:p-6 hidden lg:block overflow-y-auto`}>
+        <aside className={`${card} border-b lg:border-r ${darkMode ? 'border-gray-700' : 'border-blue-100'} w-full lg:w-80 p-4 md:p-6 hidden lg:block overflow-y-auto`}>
           {/* NAV BUTTONS */}
           <div className="flex flex-col gap-2 mb-6 space-y-2">
             {[
@@ -537,10 +720,12 @@ export default function App() {
               <button
                 key={nav.id}
                 onClick={() => setCurrentPage(nav.id)}
-                className={`py-3 px-4 rounded-lg font-bold text-sm transition transform hover:scale-105 ${
+                className={`py-3 px-4 rounded-xl font-bold text-sm transition transform hover:scale-105 ${
                   currentPage === nav.id
-                    ? 'bg-blue-600 text-white shadow-lg'
-                    : `${card} border border-gray-700 hover:border-gray-600`
+                    ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg'
+                    : darkMode 
+                      ? 'bg-gray-700 hover:bg-gray-600' 
+                      : 'bg-blue-100 hover:bg-blue-200 text-blue-900'
                 }`}
               >
                 {nav.icon} {nav.label}
@@ -549,35 +734,35 @@ export default function App() {
           </div>
 
           {/* PLANO CARD */}
-          <div className={`bg-gradient-to-br ${isAdmin ? 'from-yellow-500 to-yellow-600' : PLAN_COLORS[plan]} rounded-xl p-6 mb-6 text-white shadow-lg transform transition hover:scale-105`}>
+          <div className={`bg-gradient-to-br ${PRICING_PLANS[plan].color} rounded-2xl p-6 mb-6 text-white shadow-xl transform transition hover:scale-105`}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-2xl font-bold">
-                {isAdmin ? '👑' : plan === 'free' ? '🟢' : plan === 'pro' ? '🔵' : '🟣'} {isAdmin ? 'MASTER' : PLAN_NAMES[plan]}
+              <h3 className="text-2xl font-black">
+                {PRICING_PLANS[plan].emoji} {PRICING_PLANS[plan].name}
               </h3>
             </div>
 
-            <div className="bg-white bg-opacity-20 rounded-lg p-4 mb-4 backdrop-blur">
+            <div className="bg-white bg-opacity-20 rounded-xl p-4 mb-4 backdrop-blur">
               <div className="flex items-center justify-between mb-2">
-                <p className="text-sm font-semibold">Scripts Usados</p>
+                <p className="text-sm font-semibold">Scripts Gerados</p>
                 <p className="text-sm font-bold">
-                  {isAdmin ? '∞' : scriptsUsed} / {isAdmin ? '∞' : scriptLimit}
+                  {isAdmin ? '∞' : creditsUsed} / {isAdmin ? '∞' : creditLimit}
                 </p>
               </div>
-              <div className="w-full bg-white bg-opacity-20 rounded-full h-2 overflow-hidden">
+              <div className="w-full bg-white bg-opacity-20 rounded-full h-2.5 overflow-hidden">
                 <div
                   className="bg-white h-full transition-all duration-500 rounded-full"
-                  style={{ width: `${Math.min(scriptPercentage, 100)}%` }}
+                  style={{ width: `${Math.min(creditPercentage, 100)}%` }}
                 />
               </div>
               <p className="text-xs mt-2 opacity-90">
-                {isAdmin ? '∞ ilimitado' : `${scriptsRemaining} restantes`}
+                {isAdmin ? '∞ ilimitado' : `${creditsRemaining} restantes`}
               </p>
             </div>
 
-            {!isAdmin && plan !== 'business' && (
+            {!isAdmin && plan !== 'top' && (
               <button
                 onClick={() => setShowUpgradeModal(true)}
-                className="w-full py-2 bg-white text-gray-900 rounded font-bold text-sm hover:bg-gray-100 transition transform hover:scale-105"
+                className="w-full py-2 bg-white text-gray-900 rounded-lg font-bold text-sm hover:bg-gray-100 transition transform hover:scale-105"
               >
                 ⬆️ Upgrade
               </button>
@@ -587,21 +772,27 @@ export default function App() {
           {currentPage === 'scripts' && (
             <>
               <div className="mb-6">
-                <h4 className="font-bold text-gray-400 text-sm uppercase mb-3">📌 Histórico</h4>
+                <h4 className={`font-bold text-sm uppercase mb-3 ${darkMode ? 'text-gray-400' : 'text-blue-600'}`}>
+                  📌 Histórico
+                </h4>
                 {history.length === 0 ? (
-                  <p className="text-gray-500 text-sm">Nenhuma busca ainda</p>
+                  <p className={`text-sm ${darkMode ? 'text-gray-500' : 'text-blue-400'}`}>Nenhuma busca ainda</p>
                 ) : (
                   <div className="space-y-2">
                     {history.map((h, i) => (
                       <button
                         key={i}
                         onClick={() => setNiche(h.niche)}
-                        className={`w-full text-left p-3 rounded transition transform hover:scale-105 ${
-                          darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-200'
+                        className={`w-full text-left p-3 rounded-lg transition transform hover:scale-105 ${
+                          darkMode 
+                            ? 'hover:bg-gray-700' 
+                            : 'hover:bg-blue-100'
                         }`}
                       >
                         <p className="font-medium text-sm truncate">{h.niche}</p>
-                        <p className="text-xs text-gray-500">{h.timestamp}</p>
+                        <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-blue-400'}`}>
+                          {h.timestamp}
+                        </p>
                       </button>
                     ))}
                   </div>
@@ -609,8 +800,12 @@ export default function App() {
               </div>
 
               <div className="mb-6">
-                <h4 className="font-bold text-gray-400 text-sm uppercase mb-3">❤️ Favoritos</h4>
-                <p className="text-gray-500 text-sm font-semibold">{favorites.length} script(s)</p>
+                <h4 className={`font-bold text-sm uppercase mb-3 ${darkMode ? 'text-gray-400' : 'text-blue-600'}`}>
+                  ❤️ Favoritos
+                </h4>
+                <p className={`text-sm font-semibold ${darkMode ? 'text-gray-500' : 'text-blue-500'}`}>
+                  {favorites.length} script(s)
+                </p>
               </div>
             </>
           )}
@@ -620,11 +815,13 @@ export default function App() {
               {[
                 { label: 'Total de Scripts', value: analyticsData.totalScripts, icon: '📊' },
                 { label: 'Nichos', value: analyticsData.totalNiches, icon: '🎯' },
-                { label: 'Favoritos', value: analyticsData.favoriteCount, icon: '❤️', color: 'text-red-500' }
+                { label: 'Favoritos', value: analyticsData.favoriteCount, icon: '❤️' }
               ].map((stat, i) => (
-                <div key={i} className={`${card} border border-gray-700 rounded-lg p-4 hover:border-gray-600 transition`}>
-                  <p className="text-gray-400 text-xs uppercase font-bold mb-1">{stat.icon} {stat.label}</p>
-                  <p className={`text-3xl font-bold ${stat.color || ''}`}>{stat.value}</p>
+                <div key={i} className={`${card} rounded-lg p-4 border ${darkMode ? 'border-gray-700' : 'border-blue-200'} hover:border-gray-600 transition`}>
+                  <p className={`text-xs uppercase font-bold mb-1 ${darkMode ? 'text-gray-400' : 'text-blue-600'}`}>
+                    {stat.icon} {stat.label}
+                  </p>
+                  <p className="text-3xl font-black">{stat.value}</p>
                 </div>
               ))}
             </div>
@@ -636,14 +833,22 @@ export default function App() {
           <div className="max-w-5xl mx-auto">
             {/* MESSAGES */}
             {error && (
-              <div className="mb-6 p-4 bg-red-500 bg-opacity-20 border border-red-500 rounded-lg flex items-start gap-3 animate-in fade-in slide-in-from-top">
-                <AlertCircle className="text-red-400 flex-shrink-0 mt-1" size={20} />
-                <p className="text-red-400 text-sm font-medium">{error}</p>
+              <div className={`mb-6 p-4 rounded-xl flex items-start gap-3 animate-in fade-in slide-in-from-top border ${
+                darkMode
+                  ? 'bg-red-500 bg-opacity-20 border-red-500'
+                  : 'bg-red-50 border-red-200'
+              }`}>
+                <AlertCircle className={`${darkMode ? 'text-red-400' : 'text-red-600'} flex-shrink-0 mt-1`} size={20} />
+                <p className={`text-sm font-medium ${darkMode ? 'text-red-400' : 'text-red-700'}`}>{error}</p>
               </div>
             )}
             {success && (
-              <div className="mb-6 p-4 bg-green-500 bg-opacity-20 border border-green-500 rounded-lg animate-in fade-in slide-in-from-top">
-                <p className="text-green-400 text-sm font-medium">{success}</p>
+              <div className={`mb-6 p-4 rounded-xl animate-in fade-in slide-in-from-top border ${
+                darkMode
+                  ? 'bg-green-500 bg-opacity-20 border-green-500'
+                  : 'bg-green-50 border-green-200'
+              }`}>
+                <p className={`text-sm font-medium ${darkMode ? 'text-green-400' : 'text-green-700'}`}>{success}</p>
               </div>
             )}
 
@@ -653,13 +858,13 @@ export default function App() {
 
             {currentPage === 'scripts' && (
               <>
-                <div className={`${card} rounded-2xl p-6 md:p-8 mb-8 border border-gray-700 shadow-2xl`}>
+                <div className={`${card} rounded-3xl p-6 md:p-8 mb-8 border ${darkMode ? 'border-gray-700' : 'border-blue-200'} shadow-xl`}>
                   <div className="mb-6">
-                    <h2 className="text-3xl md:text-4xl font-black mb-2 bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+                    <h2 className="text-3xl md:text-4xl font-black mb-2 bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
                       Scripts Virais com IA
                     </h2>
-                    <p className="text-gray-400 text-sm md:text-base">
-                      Gere scripts profissionais em segundos {!isAdmin && scriptsRemaining !== '∞' && `(${scriptsRemaining} restantes)`}
+                    <p className={`text-sm md:text-base ${darkMode ? 'text-gray-400' : 'text-blue-600'}`}>
+                      Gere scripts profissionais em segundos {!isAdmin && creditsRemaining !== '∞' && `(${creditsRemaining} restantes)`}
                     </p>
                   </div>
 
@@ -669,13 +874,13 @@ export default function App() {
                       value={niche}
                       onChange={(e) => setNiche(e.target.value)}
                       placeholder="Ex: Marketing Digital, Personal Trainer, Beleza..."
-                      className={`flex-1 px-4 py-3 rounded-lg border ${input} focus:outline-none focus:ring-2 focus:ring-blue-500 transition`}
+                      className={`flex-1 px-4 py-3 rounded-xl border ${input} focus:outline-none focus:ring-2 focus:ring-blue-500 transition`}
                       onKeyPress={(e) => e.key === 'Enter' && handleGenerateScripts()}
                     />
                     <button
                       onClick={handleGenerateScripts}
-                      disabled={appLoading || (!isAdmin && scriptsRemaining === 0)}
-                      className="bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold py-3 px-6 rounded-lg hover:opacity-90 disabled:opacity-50 transition transform hover:scale-105 flex items-center justify-center gap-2 whitespace-nowrap"
+                      disabled={appLoading || (!isAdmin && creditsRemaining === 0)}
+                      className="bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold py-3 px-6 rounded-xl hover:opacity-90 disabled:opacity-50 transition transform hover:scale-105 flex items-center justify-center gap-2 whitespace-nowrap shadow-lg"
                     >
                       {appLoading ? <Loader size={18} className="animate-spin" /> : '✨'}
                       {appLoading ? 'Gerando...' : 'Gerar'}
@@ -683,20 +888,32 @@ export default function App() {
                   </div>
 
                   {isAdmin && (
-                    <div className="p-3 bg-yellow-500 bg-opacity-20 border border-yellow-500 rounded-lg text-yellow-300 text-sm font-medium">
+                    <div className={`p-3 rounded-lg text-sm font-medium border ${
+                      darkMode
+                        ? 'bg-yellow-500 bg-opacity-20 border-yellow-500 text-yellow-300'
+                        : 'bg-yellow-50 border-yellow-200 text-yellow-700'
+                    }`}>
                       ✨ Admin Master: Scripts ilimitados!
                     </div>
                   )}
 
-                  {!isAdmin && scriptsRemaining === 0 && (
-                    <div className="p-4 bg-yellow-500 bg-opacity-20 border border-yellow-500 rounded-lg flex items-start gap-3">
-                      <Zap className="text-yellow-400 flex-shrink-0 mt-1" size={20} />
+                  {!isAdmin && creditsRemaining === 0 && (
+                    <div className={`p-4 rounded-lg flex items-start gap-3 border ${
+                      darkMode
+                        ? 'bg-yellow-500 bg-opacity-20 border-yellow-500'
+                        : 'bg-yellow-50 border-yellow-200'
+                    }`}>
+                      <Zap className={`${darkMode ? 'text-yellow-400' : 'text-yellow-600'} flex-shrink-0 mt-1`} size={20} />
                       <div>
-                        <p className="text-yellow-400 font-bold text-sm mb-2">Limite atingido!</p>
-                        <p className="text-yellow-300 text-xs mb-3">Você usou todos os {scriptLimit} scripts do seu plano.</p>
+                        <p className={`font-bold text-sm mb-2 ${darkMode ? 'text-yellow-400' : 'text-yellow-700'}`}>
+                          Limite atingido!
+                        </p>
+                        <p className={`text-xs mb-3 ${darkMode ? 'text-yellow-300' : 'text-yellow-600'}`}>
+                          Você usou todos os {creditLimit} scripts do seu plano.
+                        </p>
                         <button
                           onClick={() => setShowUpgradeModal(true)}
-                          className="px-4 py-2 bg-yellow-500 text-gray-900 rounded font-bold text-sm hover:bg-yellow-600 transition transform hover:scale-105"
+                          className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-gray-900 rounded-lg font-bold text-sm transition transform hover:scale-105"
                         >
                           ⬆️ Upgrade Agora
                         </button>
@@ -712,16 +929,26 @@ export default function App() {
                       {scripts.map((s, i) => (
                         <div
                           key={i}
-                          className={`${card} rounded-xl p-6 border-l-4 border-blue-500 border border-gray-700 shadow-lg hover:shadow-2xl transition transform hover:scale-[1.02]`}
+                          className={`${card} rounded-2xl p-6 border-l-4 border-blue-500 border ${
+                            darkMode ? 'border-gray-700' : 'border-blue-200'
+                          } shadow-lg hover:shadow-2xl transition transform hover:scale-[1.01]`}
                         >
                           <div className="flex items-start justify-between mb-4 gap-4">
                             <div className="flex-1">
                               <h3 className="text-lg md:text-xl font-bold mb-3">{s.titulo}</h3>
                               <div className="flex gap-2 flex-wrap">
-                                <span className="px-3 py-1 bg-blue-500 bg-opacity-20 text-blue-300 rounded-full text-xs font-semibold">
-                                  ⏱️ {s.duracao}
+                                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                  darkMode
+                                    ? 'bg-blue-500 bg-opacity-20 text-blue-300'
+                                    : 'bg-blue-100 text-blue-700'
+                                }`}>
+                                  ⏱️ {s.video_duration || s.duracao}
                                 </span>
-                                <span className="px-3 py-1 bg-green-500 bg-opacity-20 text-green-300 rounded-full text-xs font-semibold">
+                                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                  darkMode
+                                    ? 'bg-green-500 bg-opacity-20 text-green-300'
+                                    : 'bg-green-100 text-green-700'
+                                }`}>
                                   📈 {s.dificuldade}
                                 </span>
                               </div>
@@ -736,7 +963,7 @@ export default function App() {
                                 className={
                                   favorites.includes(s.titulo)
                                     ? 'text-red-500'
-                                    : 'text-gray-500 hover:text-red-500'
+                                    : `${darkMode ? 'text-gray-500 hover:text-red-500' : 'text-gray-400 hover:text-red-500'}`
                                 }
                               />
                             </button>
@@ -749,13 +976,19 @@ export default function App() {
                               { label: '📢 Call-to-Action', content: s.cta, id: `cta-${i}` }
                             ].map((section, idx) => (
                               <div key={idx}>
-                                <p className="text-xs font-bold text-gray-400 uppercase mb-2">{section.label}</p>
-                                <p className={`text-sm leading-relaxed mb-2 ${section.label.includes('Call') ? 'text-blue-400 font-semibold' : ''}`}>
+                                <p className={`text-xs font-bold uppercase mb-2 ${darkMode ? 'text-gray-400' : 'text-blue-600'}`}>
+                                  {section.label}
+                                </p>
+                                <p className={`text-sm leading-relaxed mb-2 ${section.label.includes('Call') ? darkMode ? 'text-blue-400' : 'text-blue-600' : ''} font-semibold`}>
                                   {section.content}
                                 </p>
                                 <button
                                   onClick={() => copyToClipboard(section.content, section.id)}
-                                  className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 transition transform hover:scale-105"
+                                  className={`text-xs flex items-center gap-1 transition transform hover:scale-105 ${
+                                    darkMode
+                                      ? 'text-blue-400 hover:text-blue-300'
+                                      : 'text-blue-600 hover:text-blue-700'
+                                  }`}
                                 >
                                   <Copy size={14} />
                                   {copied === section.id ? 'Copiado!' : 'Copiar'}
@@ -764,16 +997,89 @@ export default function App() {
                             ))}
                           </div>
 
+                          {/* HASHTAGS SECTION */}
+                          {s.hashtags && s.hashtags.length > 0 && (
+                            <div className={`mb-4 p-4 rounded-lg border ${
+                              darkMode
+                                ? 'bg-purple-500 bg-opacity-10 border-purple-500 border-opacity-30'
+                                : 'bg-purple-50 border-purple-200'
+                            }`}>
+                              <p className={`text-xs font-bold uppercase mb-2 flex items-center gap-1 ${
+                                darkMode ? 'text-purple-400' : 'text-purple-600'
+                              }`}>
+                                <Tag size={14} /> Hashtags {plan !== 'free' && '(Alto Engajamento)'}
+                              </p>
+                              <div className="flex gap-2 flex-wrap">
+                                {s.hashtags.map((tag, idx) => (
+                                  <button
+                                    key={idx}
+                                    onClick={() => copyToClipboard(tag, `hashtag-${i}-${idx}`)}
+                                    className={`px-3 py-1 rounded-full text-xs font-bold transition transform hover:scale-110 ${
+                                      darkMode
+                                        ? 'bg-purple-600 text-purple-100 hover:bg-purple-500'
+                                        : 'bg-purple-200 text-purple-800 hover:bg-purple-300'
+                                    }`}
+                                  >
+                                    {tag}
+                                  </button>
+                                ))}
+                              </div>
+                              {copied && copied.includes('hashtag') && (
+                                <p className="text-xs text-green-500 mt-2">✓ Copiado!</p>
+                              )}
+                            </div>
+                          )}
+
+                          {/* REFERENCE URLs */}
+                          {plan !== 'free' && s.reference_urls && s.reference_urls.length > 0 && (
+                            <div className={`mb-4 p-4 rounded-lg border ${
+                              darkMode
+                                ? 'bg-cyan-500 bg-opacity-10 border-cyan-500 border-opacity-30'
+                                : 'bg-cyan-50 border-cyan-200'
+                            }`}>
+                              <p className={`text-xs font-bold uppercase mb-2 flex items-center gap-1 ${
+                                darkMode ? 'text-cyan-400' : 'text-cyan-600'
+                              }`}>
+                                <ExternalLink size={14} /> URLs de Referência
+                              </p>
+                              <div className="space-y-2">
+                                {s.reference_urls.map((ref, idx) => (
+                                  
+                                    key={idx}
+                                    href={ref.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className={`flex items-center gap-2 p-2 rounded transition transform hover:scale-105 ${
+                                      darkMode
+                                        ? 'hover:bg-gray-700'
+                                        : 'hover:bg-cyan-100'
+                                    }`}
+                                  >
+                                    <span>{ref.emoji}</span>
+                                    <span className={`text-sm font-semibold ${darkMode ? 'text-cyan-400' : 'text-cyan-600'}`}>
+                                      {ref.platform.toUpperCase()}
+                                    </span>
+                                    <ExternalLink size={14} className={darkMode ? 'text-cyan-400' : 'text-cyan-600'} />
+                                  </a>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
                           <div className="flex flex-col md:flex-row gap-3 pt-4 border-t border-gray-700">
                             <button
                               onClick={() => downloadScript(s)}
-                              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-gray-700 hover:bg-gray-600 transition transform hover:scale-105 text-sm font-medium"
+                              className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg transition transform hover:scale-105 text-sm font-medium ${
+                                darkMode
+                                  ? 'bg-gray-700 hover:bg-gray-600'
+                                  : 'bg-blue-100 hover:bg-blue-200 text-blue-900'
+                              }`}
                             >
                               <Download size={18} /> Baixar
                             </button>
                             <button
                               onClick={() => shareScript(s)}
-                              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-green-600 hover:bg-green-700 transition transform hover:scale-105 text-sm font-medium"
+                              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-green-600 hover:bg-green-700 transition transform hover:scale-105 text-sm font-medium text-white"
                             >
                               <Share2 size={18} /> WhatsApp
                             </button>
@@ -785,10 +1091,16 @@ export default function App() {
                 )}
 
                 {!scripts.length && !appLoading && (
-                  <div className={`${card} rounded-2xl p-12 text-center border border-gray-700 border-dashed`}>
-                    <p className="text-4xl mb-4">🎯</p>
-                    <p className="text-gray-400 text-lg font-semibold">Digite um nicho para começar</p>
-                    <p className="text-gray-500 text-sm mt-2">Crie scripts virais incríveis em segundos!</p>
+                  <div className={`${card} rounded-3xl p-12 text-center border-2 border-dashed ${
+                    darkMode ? 'border-gray-700' : 'border-blue-200'
+                  }`}>
+                    <p className="text-5xl mb-4">🎯</p>
+                    <p className={`text-lg font-semibold ${darkMode ? 'text-gray-400' : 'text-blue-600'}`}>
+                      Digite um nicho para começar
+                    </p>
+                    <p className={`text-sm mt-2 ${darkMode ? 'text-gray-500' : 'text-blue-500'}`}>
+                      Crie scripts virais incríveis em segundos!
+                    </p>
                   </div>
                 )}
               </>
@@ -796,14 +1108,14 @@ export default function App() {
 
             {currentPage === 'analytics' && (
               <>
-                <h2 className="text-3xl md:text-4xl font-black mb-8 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+                <h2 className="text-3xl md:text-4xl font-black mb-8 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
                   📊 Analytics Dashboard
                 </h2>
 
                 {analyticsLoading ? (
                   <div className="flex items-center justify-center gap-4 py-12">
                     <Loader className="animate-spin text-blue-500" size={32} />
-                    <p className="text-gray-400">Carregando dados...</p>
+                    <p className={darkMode ? 'text-gray-400' : 'text-blue-600'}>Carregando dados...</p>
                   </div>
                 ) : analyticsData.totalScripts > 0 ? (
                   <div className="space-y-8">
@@ -814,18 +1126,22 @@ export default function App() {
                         { label: 'Favoritos', value: analyticsData.favoriteCount, icon: '❤️', color: 'from-red-500' },
                         { label: 'Nicho Top', value: analyticsData.topNiche, icon: '⭐', color: 'from-yellow-500' }
                       ].map((stat, i) => (
-                        <div key={i} className={`${card} rounded-xl p-6 border border-gray-700 hover:border-gray-600 transition transform hover:scale-105 shadow-lg`}>
+                        <div key={i} className={`${card} rounded-2xl p-6 border ${
+                          darkMode ? 'border-gray-700' : 'border-blue-200'
+                        } hover:border-gray-600 transition transform hover:scale-105 shadow-lg`}>
                           <div className={`text-2xl mb-3 bg-gradient-to-r ${stat.color} to-pink-500 bg-clip-text text-transparent`}>
                             {stat.icon}
                           </div>
-                          <p className="text-gray-400 text-sm uppercase font-bold mb-2">{stat.label}</p>
+                          <p className={`text-sm uppercase font-bold mb-2 ${darkMode ? 'text-gray-400' : 'text-blue-600'}`}>
+                            {stat.label}
+                          </p>
                           <p className="text-4xl font-black">{stat.value}</p>
                         </div>
                       ))}
                     </div>
 
                     {analyticsData.nicheData.length > 0 && (
-                      <div className={`${card} rounded-xl p-6 border border-gray-700 shadow-lg`}>
+                      <div className={`${card} rounded-2xl p-6 border ${darkMode ? 'border-gray-700' : 'border-blue-200'} shadow-lg`}>
                         <h3 className="text-xl font-bold mb-4">Scripts por Nicho</h3>
                         <ResponsiveContainer width="100%" height={300}>
                           <PieChart>
@@ -850,7 +1166,7 @@ export default function App() {
                     )}
 
                     {analyticsData.timelineData.length > 0 && (
-                      <div className={`${card} rounded-xl p-6 border border-gray-700 shadow-lg`}>
+                      <div className={`${card} rounded-2xl p-6 border ${darkMode ? 'border-gray-700' : 'border-blue-200'} shadow-lg`}>
                         <h3 className="text-xl font-bold mb-4">Evolução ao Longo do Tempo</h3>
                         <ResponsiveContainer width="100%" height={300}>
                           <LineChart data={analyticsData.timelineData}>
@@ -866,7 +1182,7 @@ export default function App() {
                     )}
 
                     {analyticsData.nicheData.length > 0 && (
-                      <div className={`${card} rounded-xl p-6 border border-gray-700 shadow-lg`}>
+                      <div className={`${card} rounded-2xl p-6 border ${darkMode ? 'border-gray-700' : 'border-blue-200'} shadow-lg`}>
                         <h3 className="text-xl font-bold mb-4">Ranking de Nichos</h3>
                         <ResponsiveContainer width="100%" height={300}>
                           <BarChart data={analyticsData.nicheData}>
@@ -881,10 +1197,16 @@ export default function App() {
                     )}
                   </div>
                 ) : (
-                  <div className={`${card} rounded-2xl p-12 text-center border border-gray-700 border-dashed`}>
+                  <div className={`${card} rounded-3xl p-12 text-center border-2 border-dashed ${
+                    darkMode ? 'border-gray-700' : 'border-blue-200'
+                  }`}>
                     <p className="text-4xl mb-4">📉</p>
-                    <p className="text-gray-400 text-lg font-semibold">Nenhum dado ainda</p>
-                    <p className="text-gray-500 text-sm mt-2">Gere alguns scripts para ver as estatísticas!</p>
+                    <p className={`text-lg font-semibold ${darkMode ? 'text-gray-400' : 'text-blue-600'}`}>
+                      Nenhum dado ainda
+                    </p>
+                    <p className={`text-sm mt-2 ${darkMode ? 'text-gray-500' : 'text-blue-500'}`}>
+                      Gere alguns scripts para ver as estatísticas!
+                    </p>
                   </div>
                 )}
               </>
@@ -892,24 +1214,30 @@ export default function App() {
 
             {currentPage === 'settings' && (
               <>
-                <h2 className="text-3xl md:text-4xl font-black mb-8">⚙️ Configurações</h2>
+                <h2 className="text-3xl md:text-4xl font-black mb-8 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                  ⚙️ Configurações
+                </h2>
 
                 <div className="space-y-6">
                   {/* PERFIL */}
-                  <div className={`${card} rounded-2xl p-6 md:p-8 border border-gray-700 shadow-lg`}>
+                  <div className={`${card} rounded-2xl p-6 md:p-8 border ${darkMode ? 'border-gray-700' : 'border-blue-200'} shadow-lg`}>
                     <h3 className="text-2xl font-bold mb-6">👤 Perfil</h3>
                     <div className="space-y-4 mb-6">
                       <div>
-                        <label className="block text-sm font-bold text-gray-400 mb-2">Email</label>
+                        <label className={`block text-sm font-bold mb-2 ${darkMode ? 'text-gray-400' : 'text-blue-600'}`}>
+                          Email
+                        </label>
                         <input
                           type="email"
-                          value={userProfile.email}
+                          value={user.email || ''}
                           disabled
                           className={`w-full px-4 py-3 rounded-lg border ${input} opacity-50 cursor-not-allowed`}
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-bold text-gray-400 mb-2">Nome Completo</label>
+                        <label className={`block text-sm font-bold mb-2 ${darkMode ? 'text-gray-400' : 'text-blue-600'}`}>
+                          Nome Completo
+                        </label>
                         <input
                           type="text"
                           value={settingsForm.fullName}
@@ -927,18 +1255,20 @@ export default function App() {
                       {settingsLoading ? '⏳ Salvando...' : '💾 Salvar Perfil'}
                     </button>
                     {settingsMessage && (
-                      <p className={`mt-4 text-sm font-medium ${settingsMessage.includes('❌') ? 'text-red-400' : 'text-green-400'}`}>
+                      <p className={`mt-4 text-sm font-medium ${settingsMessage.includes('❌') ? darkMode ? 'text-red-400' : 'text-red-600' : darkMode ? 'text-green-400' : 'text-green-600'}`}>
                         {settingsMessage}
                       </p>
                     )}
                   </div>
 
                   {/* SEGURANÇA */}
-                  <div className={`${card} rounded-2xl p-6 md:p-8 border border-gray-700 shadow-lg`}>
+                  <div className={`${card} rounded-2xl p-6 md:p-8 border ${darkMode ? 'border-gray-700' : 'border-blue-200'} shadow-lg`}>
                     <h3 className="text-2xl font-bold mb-6">🔐 Segurança</h3>
                     <div className="space-y-4 mb-6">
                       <div>
-                        <label className="block text-sm font-bold text-gray-400 mb-2">Nova Senha</label>
+                        <label className={`block text-sm font-bold mb-2 ${darkMode ? 'text-gray-400' : 'text-blue-600'}`}>
+                          Nova Senha
+                        </label>
                         <input
                           type="password"
                           value={settingsForm.newPassword}
@@ -948,7 +1278,9 @@ export default function App() {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-bold text-gray-400 mb-2">Confirmar Senha</label>
+                        <label className={`block text-sm font-bold mb-2 ${darkMode ? 'text-gray-400' : 'text-blue-600'}`}>
+                          Confirmar Senha
+                        </label>
                         <input
                           type="password"
                           value={settingsForm.confirmPassword}
@@ -968,28 +1300,30 @@ export default function App() {
                   </div>
 
                   {/* PLANO */}
-                  <div className={`${card} rounded-2xl p-6 md:p-8 border border-gray-700 shadow-lg`}>
+                  <div className={`${card} rounded-2xl p-6 md:p-8 border ${darkMode ? 'border-gray-700' : 'border-blue-200'} shadow-lg`}>
                     <h3 className="text-2xl font-bold mb-6">💳 Plano Atual</h3>
-                    <div className={`bg-gradient-to-r ${isAdmin ? 'from-yellow-500 to-yellow-600' : PLAN_COLORS[plan]} bg-clip-text text-transparent text-4xl font-black mb-6`}>
-                      {isAdmin ? '👑 ADMIN MASTER' : PLAN_NAMES[plan]}
+                    <div className={`bg-gradient-to-r ${PRICING_PLANS[plan].color} bg-clip-text text-transparent text-4xl font-black mb-6`}>
+                      {PRICING_PLANS[plan].emoji} {PRICING_PLANS[plan].name}
                     </div>
-                    {!isAdmin && plan !== 'business' && (
+                    {!isAdmin && plan !== 'top' && (
                       <button
                         onClick={() => setShowUpgradeModal(true)}
                         className="bg-gradient-to-r from-yellow-500 to-yellow-600 text-gray-900 font-bold py-2 px-6 rounded-lg hover:opacity-90 transition transform hover:scale-105 flex items-center gap-2"
                       >
-                        <Crown size={18} /> Upgrade para Business
+                        <Crown size={18} /> Upgrade
                       </button>
                     )}
                   </div>
 
                   {/* DELETE */}
                   {!isAdmin && (
-                    <div className={`${card} rounded-2xl p-6 md:p-8 border border-red-700 bg-red-500 bg-opacity-5 shadow-lg`}>
-                      <h3 className="text-2xl font-bold mb-4 flex items-center gap-2 text-red-500">
+                    <div className={`${card} rounded-2xl p-6 md:p-8 border border-red-700 bg-red-500 ${darkMode ? 'bg-opacity-5' : 'bg-opacity-10'} shadow-lg`}>
+                      <h3 className={`text-2xl font-bold mb-4 flex items-center gap-2 ${darkMode ? 'text-red-500' : 'text-red-600'}`}>
                         <AlertCircle size={28} /> Zona de Perigo
                       </h3>
-                      <p className="text-gray-400 mb-6 text-sm">Deletar sua conta é irreversível.</p>
+                      <p className={`mb-6 text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                        Deletar sua conta é irreversível.
+                      </p>
                       <button
                         onClick={handleDeleteAccount}
                         disabled={settingsLoading}
@@ -1009,40 +1343,40 @@ export default function App() {
       {/* UPGRADE MODAL */}
       {showUpgradeModal && !isAdmin && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 backdrop-blur-sm animate-in fade-in">
-          <div className={`${card} rounded-2xl p-8 max-w-2xl w-full border border-gray-700 shadow-2xl scale-in`}>
+          <div className={`${card} rounded-3xl p-8 max-w-3xl w-full border ${darkMode ? 'border-gray-700' : 'border-blue-200'} shadow-2xl scale-in`}>
             <h2 className="text-3xl font-black mb-8 flex items-center gap-2">
               <Crown size={32} className="text-yellow-400" /> Escolha seu Plano
             </h2>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-              {[
-                { name: 'Free', emoji: '🟢', price: 'R$ 0', features: ['5 scripts/mês', 'Histórico', '❌ Download'], id: 'free' },
-                { name: 'Pro', emoji: '🔵', price: 'R$ 39/mês', features: ['50 scripts/mês', 'Download', 'Analytics'], id: 'pro', highlight: true },
-                { name: 'Business', emoji: '🟣', price: 'R$ 149/mês', features: ['Ilimitado', 'Agendamento', 'API'], id: 'business' }
-              ].map(tier => (
+              {Object.entries(PRICING_PLANS).map(([key, tier]) => (
                 <div
-                  key={tier.id}
-                  className={`rounded-xl p-6 border-2 transition transform hover:scale-105 ${
-                    plan === tier.id
+                  key={key}
+                  className={`rounded-2xl p-6 border-2 transition transform hover:scale-105 ${
+                    plan === key
                       ? 'border-blue-500 bg-blue-500 bg-opacity-10'
-                      : 'border-gray-700 hover:border-gray-600'
+                      : darkMode ? 'border-gray-700 hover:border-gray-600' : 'border-blue-200 hover:border-blue-300'
                   } ${tier.highlight ? 'ring-2 ring-blue-500' : ''}`}
                 >
                   <h3 className="text-xl font-bold mb-2">{tier.emoji} {tier.name}</h3>
-                  <p className="text-2xl font-bold mb-4 text-blue-400">{tier.price}</p>
+                  <p className="text-2xl font-bold mb-1 text-blue-500">{tier.price}</p>
+                  <p className={`text-xs mb-4 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>{tier.period}</p>
+                  <p className={`text-lg font-bold mb-4 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                    {tier.credits} scripts/mês
+                  </p>
                   <div className="space-y-2 text-sm mb-4">
                     {tier.features.map((f, i) => (
-                      <p key={i} className={f.includes('❌') ? 'text-gray-500' : 'text-gray-300'}>
-                        {f.includes('❌') ? f : `✓ ${f}`}
+                      <p key={i} className={f.included ? (darkMode ? 'text-gray-300' : 'text-gray-700') : (darkMode ? 'text-gray-500' : 'text-gray-400')}>
+                        {f.included ? '✓ ' : '✗ '} {f.text}
                       </p>
                     ))}
                   </div>
-                  {plan === tier.id && (
+                  {plan === key && (
                     <p className="text-blue-400 text-sm font-bold">✓ Seu plano atual</p>
                   )}
-                  {plan !== tier.id && (
+                  {plan !== key && (
                     <button className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:opacity-90 text-white font-bold py-2 px-3 rounded-lg transition transform hover:scale-105 text-sm">
-                      Fazer Upgrade
+                      {key === 'premium' ? 'R$ 49/mês' : 'R$ 149/mês'}
                     </button>
                   )}
                 </div>
@@ -1051,7 +1385,11 @@ export default function App() {
 
             <button
               onClick={() => setShowUpgradeModal(false)}
-              className="w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-4 rounded-lg transition transform hover:scale-105"
+              className={`w-full font-bold py-3 px-4 rounded-lg transition transform hover:scale-105 ${
+                darkMode
+                  ? 'bg-gray-700 hover:bg-gray-600 text-white'
+                  : 'bg-blue-100 hover:bg-blue-200 text-blue-900'
+              }`}
             >
               Fechar
             </button>
