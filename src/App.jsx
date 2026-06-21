@@ -645,7 +645,6 @@ export default function App() {
 
   return (
     <div className={`${bg} ${text} min-h-screen transition-colors duration-300`}>
-      {/* HEADER */}
       <header className={`${card} border-b ${darkMode ? 'border-gray-700' : 'border-blue-100'} sticky top-0 z-40 backdrop-blur-md bg-opacity-95`}>
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-4 flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
@@ -701,7 +700,6 @@ export default function App() {
       </header>
 
       <div className="flex min-h-screen flex-col lg:flex-row">
-        {/* SIDEBAR */}
         <aside className={`${card} border-b lg:border-r ${darkMode ? 'border-gray-700' : 'border-blue-100'} w-full lg:w-80 p-4 md:p-6 hidden lg:block overflow-y-auto`}>
           <div className="flex flex-col gap-2 mb-6 space-y-2">
             {[
@@ -819,7 +817,6 @@ export default function App() {
           )}
         </aside>
 
-        {/* MAIN */}
         <main className="flex-1 p-4 md:p-6 overflow-y-auto">
           <div className="max-w-5xl mx-auto">
             {error && (
@@ -1023,7 +1020,7 @@ export default function App() {
                             </div>
                           )}
 
-                          {plan !== 'free' && s.reference_urls && s.reference_urls.length > 0 && (
+                          {plan !== 'free' && s.reference_urls && s.reference_urls.length > 0 ? (
                             <div className={`mb-4 p-4 rounded-lg border ${
                               darkMode
                                 ? 'bg-cyan-500 bg-opacity-10 border-cyan-500 border-opacity-30'
@@ -1036,17 +1033,7 @@ export default function App() {
                               </p>
                               <div className="space-y-2">
                                 {s.reference_urls.map((ref, idx) => (
-                                  
-                                    key={idx}
-                                    href={ref.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className={`flex items-center gap-2 p-2 rounded transition transform hover:scale-105 ${
-                                      darkMode
-                                        ? 'hover:bg-gray-700'
-                                        : 'hover:bg-cyan-100'
-                                    }`}
-                                  >
+                                  <a key={idx} href={ref.url} target="_blank" rel="noopener noreferrer" className={`flex items-center gap-2 p-2 rounded transition transform hover:scale-105 ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-cyan-100'}`}>
                                     <span>{ref.emoji}</span>
                                     <span className={`text-sm font-semibold ${darkMode ? 'text-cyan-400' : 'text-cyan-600'}`}>
                                       {ref.platform.toUpperCase()}
@@ -1056,7 +1043,7 @@ export default function App() {
                                 ))}
                               </div>
                             </div>
-                          )}
+                          ) : null}
 
                           <div className="flex flex-col md:flex-row gap-3 pt-4 border-t border-gray-700">
                             <button
