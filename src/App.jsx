@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Copy, Download, Share2, Heart, Zap, Lock, Crown, BarChart3, FileText } from 'lucide-react';
+import { Copy, Download, Share2, Heart, Zap, Lock, Crown, BarChart3, FileText, Settings, LogOut, Mail, Key, Trash2, AlertCircle } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { supabase } from './supabaseClient';
 import Auth from './Auth';
@@ -19,6 +19,17 @@ export default function App() {
   const [scriptsUsed, setScriptsUsed] = useState(0);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [currentPage, setCurrentPage] = useState('scripts');
+  const [userProfile, setUserProfile] = useState({
+    email: '',
+    user_metadata: { full_name: '' }
+  });
+  const [settingsForm, setSettingsForm] = useState({
+    fullName: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [settingsMessage, setSettingsMessage] = useState('');
   const [analyticsData, setAnalyticsData] = useState({
     totalScripts: 0,
     totalNiches: 0,
@@ -51,6 +62,14 @@ export default function App() {
   useEffect(() => {
     supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user || null);
+      if (session?.user) {
+        setUserProfile(session.user);
+        setSettingsForm({
+          fullName: session.user.user_metadata?.full_name || '',
+          newPassword: '',
+          confirmPassword: ''
+        });
+      }
       setLoading(false);
     });
   }, []);
@@ -125,20 +144,17 @@ export default function App() {
 
   const loadAnalytics = async () => {
     try {
-      // Total de scripts
       const { count: totalCount } = await supabase
         .from('scripts')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', user.id);
 
-      // Scripts favoritos
       const { count: favCount } = await supabase
         .from('scripts')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', user.id)
         .eq('is_favorite', true);
 
-      // Todos os scripts para análise
       const { data: allScripts } = await supabase
         .from('scripts')
         .select('niche, created_at, is_favorite')
@@ -146,7 +162,6 @@ export default function App() {
         .order('created_at', { ascending: true });
 
       if (allScripts && allScripts.length > 0) {
-        // Contar por nicho
         const nicheCount = {};
         const timeline = {};
         allScripts.forEach(script => {
@@ -155,7 +170,6 @@ export default function App() {
           timeline[date] = (timeline[date] || 0) + 1;
         });
 
-        // Transformar para array
         const nicheData = Object.entries(nicheCount).map(([name, value]) => ({
           name,
           value
@@ -182,7 +196,7 @@ export default function App() {
     }
   };
 
-  const handleGenerate = async () => {
+  const handleGenerateScripts = async () => {
     if (!niche.trim()) {
       setError('Digite um nicho');
       return;
@@ -260,6 +274,77 @@ export default function App() {
     }
   };
 
+  const handleUpdateProfile = async () => {
+    setSettingsLoading(true);
+    setSettingsMessage('');
+
+    try {
+      if (settingsForm.fullName !== userProfile.user_metadata?.full_name) {
+        const { error } = await supabase.auth.updateUser({
+          data: { full_name: settingsForm.fullName }
+        });
+        if (error) throw error;
+        setSettingsMessage('✅ Perfil atualizado com sucesso!');
+      }
+
+      if (settingsForm.newPassword) {
+        if (settingsForm.newPassword !== settingsForm.confirmPassword) {
+          throw new Error('Senhas não conferem');
+        }
+        const { error } = await supabase.auth.updateUser({
+          password: settingsForm.newPassword
+        });
+        if (error) throw error;
+        setSettingsForm(prev => ({
+          ...prev,
+          newPassword: '',
+          confirmPassword: ''
+        }));
+        setSettingsMessage('✅ Senha alterada com sucesso!');
+      }
+
+      setTimeout(() => setSettingsMessage(''), 3000);
+    } catch (err) {
+      setSettingsMessage(`❌ Erro: ${err.message}`);
+    } finally {
+      setSettingsLoading(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!window.confirm('⚠️ Tem certeza? Essa ação é irreversível e deletará TODOS os seus dados!')) {
+      return;
+    }
+
+    setSettingsLoading(true);
+
+    try {
+      // Deletar scripts
+      await supabase
+        .from('scripts')
+        .delete()
+        .eq('user_id', user.id);
+
+      // Deletar subscrição
+      await supabase
+        .from('user_subscriptions')
+        .delete()
+        .eq('user_id', user.id);
+
+      // Deletar usuário
+      const { error } = await supabase.auth.admin.deleteUser(user.id);
+      if (error) throw error;
+
+      // Logout
+      await supabase.auth.signOut();
+      setUser(null);
+    } catch (err) {
+      setSettingsMessage(`❌ Erro: ${err.message}`);
+    } finally {
+      setSettingsLoading(false);
+    }
+  };
+
   const copyToClipboard = (text, id) => {
     navigator.clipboard.writeText(text);
     setCopied(id);
@@ -316,7 +401,7 @@ export default function App() {
   const bg = darkMode ? 'bg-gray-900' : 'bg-white';
   const text = darkMode ? 'text-white' : 'text-gray-900';
   const card = darkMode ? 'bg-gray-800' : 'bg-gray-50';
-  const input = darkMode ? 'bg-gray-700 text-white' : 'bg-white text-gray-900 border-gray-300';
+  const input = darkMode ? 'bg-gray-700 text-white border-gray-600' : 'bg-white text-gray-900 border-gray-300';
   const chartBg = darkMode ? '#1f2937' : '#ffffff';
   const chartText = darkMode ? '#ffffff' : '#000000';
 
@@ -356,9 +441,9 @@ export default function App() {
             </button>
             <button
               onClick={handleLogout}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm font-bold transition"
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm font-bold transition flex items-center gap-2"
             >
-              Sair
+              <LogOut size={16} /> Sair
             </button>
           </div>
         </div>
@@ -368,10 +453,10 @@ export default function App() {
         {/* SIDEBAR */}
         <aside className={`${card} border-r border-gray-700 w-80 p-6 hidden lg:block overflow-y-auto`}>
           {/* NAV BUTTONS */}
-          <div className="flex gap-2 mb-6">
+          <div className="flex flex-col gap-2 mb-6 space-y-2">
             <button
               onClick={() => setCurrentPage('scripts')}
-              className={`flex-1 py-2 px-3 rounded-lg font-bold text-sm transition flex items-center justify-center gap-2 ${
+              className={`py-2 px-3 rounded-lg font-bold text-sm transition flex items-center gap-2 ${
                 currentPage === 'scripts'
                   ? 'bg-blue-600 text-white'
                   : `${card} border border-gray-700 hover:border-gray-600`
@@ -381,13 +466,23 @@ export default function App() {
             </button>
             <button
               onClick={() => setCurrentPage('analytics')}
-              className={`flex-1 py-2 px-3 rounded-lg font-bold text-sm transition flex items-center justify-center gap-2 ${
+              className={`py-2 px-3 rounded-lg font-bold text-sm transition flex items-center gap-2 ${
                 currentPage === 'analytics'
                   ? 'bg-blue-600 text-white'
                   : `${card} border border-gray-700 hover:border-gray-600`
               }`}
             >
               <BarChart3 size={16} /> Analytics
+            </button>
+            <button
+              onClick={() => setCurrentPage('settings')}
+              className={`py-2 px-3 rounded-lg font-bold text-sm transition flex items-center gap-2 ${
+                currentPage === 'settings'
+                  ? 'bg-blue-600 text-white'
+                  : `${card} border border-gray-700 hover:border-gray-600`
+              }`}
+            >
+              <Settings size={16} /> Configurações
             </button>
           </div>
 
@@ -426,9 +521,8 @@ export default function App() {
             </div>
           </div>
 
-          {currentPage === 'scripts' ? (
+          {currentPage === 'scripts' && (
             <>
-              {/* HISTÓRICO */}
               <div className="mb-6">
                 <h4 className="font-bold text-gray-400 text-sm uppercase mb-3">Histórico</h4>
                 {history.length === 0 ? (
@@ -451,37 +545,30 @@ export default function App() {
                 )}
               </div>
 
-              {/* FAVORITOS */}
               <div className="mb-6">
                 <h4 className="font-bold text-gray-400 text-sm uppercase mb-3">❤️ Favoritos</h4>
                 <p className="text-gray-500 text-sm">{favorites.length} script(s) salvo(s)</p>
               </div>
             </>
-          ) : (
-            <>
-              {/* ANALYTICS STATS */}
-              <div className="space-y-3 mb-6">
-                <div className={`${card} border border-gray-700 rounded-lg p-4`}>
-                  <p className="text-gray-400 text-xs uppercase font-bold mb-1">Total de Scripts</p>
-                  <p className="text-3xl font-bold">{analyticsData.totalScripts}</p>
-                </div>
-                <div className={`${card} border border-gray-700 rounded-lg p-4`}>
-                  <p className="text-gray-400 text-xs uppercase font-bold mb-1">Nichos</p>
-                  <p className="text-3xl font-bold">{analyticsData.totalNiches}</p>
-                </div>
-                <div className={`${card} border border-gray-700 rounded-lg p-4`}>
-                  <p className="text-gray-400 text-xs uppercase font-bold mb-1">Favoritos</p>
-                  <p className="text-3xl font-bold text-red-500">{analyticsData.favoriteCount}</p>
-                </div>
-                <div className={`${card} border border-gray-700 rounded-lg p-4`}>
-                  <p className="text-gray-400 text-xs uppercase font-bold mb-1">Nicho Top</p>
-                  <p className="text-lg font-bold truncate">{analyticsData.topNiche}</p>
-                </div>
-              </div>
-            </>
           )}
 
-          {/* UPGRADE BOX */}
+          {currentPage === 'analytics' && (
+            <div className="space-y-3 mb-6">
+              <div className={`${card} border border-gray-700 rounded-lg p-4`}>
+                <p className="text-gray-400 text-xs uppercase font-bold mb-1">Total de Scripts</p>
+                <p className="text-3xl font-bold">{analyticsData.totalScripts}</p>
+              </div>
+              <div className={`${card} border border-gray-700 rounded-lg p-4`}>
+                <p className="text-gray-400 text-xs uppercase font-bold mb-1">Nichos</p>
+                <p className="text-3xl font-bold">{analyticsData.totalNiches}</p>
+              </div>
+              <div className={`${card} border border-gray-700 rounded-lg p-4`}>
+                <p className="text-gray-400 text-xs uppercase font-bold mb-1">Favoritos</p>
+                <p className="text-3xl font-bold text-red-500">{analyticsData.favoriteCount}</p>
+              </div>
+            </div>
+          )}
+
           {plan !== 'business' && (
             <div className={`bg-gradient-to-br from-purple-900 to-purple-800 rounded-xl p-4 border border-purple-700`}>
               <div className="flex items-center gap-2 mb-2">
@@ -504,9 +591,8 @@ export default function App() {
         {/* MAIN */}
         <main className="flex-1 p-6">
           <div className="max-w-5xl mx-auto">
-            {currentPage === 'scripts' ? (
+            {currentPage === 'scripts' && (
               <>
-                {/* SEARCH */}
                 <div className={`${card} rounded-xl p-8 mb-8 border border-gray-700 shadow-lg`}>
                   <h2 className="text-3xl font-bold mb-2">Scripts Virais com IA</h2>
                   <p className="text-gray-400 mb-6">
@@ -520,10 +606,10 @@ export default function App() {
                       onChange={(e) => setNiche(e.target.value)}
                       placeholder="Ex: Marketing Digital, Personal Trainer, Beleza..."
                       className={`flex-1 px-4 py-3 rounded-lg border ${input} focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                      onKeyPress={(e) => e.key === 'Enter' && handleGenerate()}
+                      onKeyPress={(e) => e.key === 'Enter' && handleGenerateScripts()}
                     />
                     <button
-                      onClick={handleGenerate}
+                      onClick={handleGenerateScripts}
                       disabled={appLoading || scriptsRemaining === 0}
                       className="bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold py-3 px-6 rounded-lg hover:opacity-90 disabled:opacity-50 transition whitespace-nowrap flex items-center gap-2"
                     >
@@ -557,7 +643,6 @@ export default function App() {
                   )}
                 </div>
 
-                {/* SCRIPTS */}
                 {scripts.length > 0 && (
                   <div>
                     <h2 className="text-2xl font-bold mb-6">📝 {scripts.length} Scripts Gerados</h2>
@@ -659,14 +744,14 @@ export default function App() {
                   </div>
                 )}
               </>
-            ) : (
+            )}
+
+            {currentPage === 'analytics' && (
               <>
-                {/* ANALYTICS PAGE */}
                 <h2 className="text-3xl font-bold mb-8">📊 Analytics Dashboard</h2>
 
                 {analyticsData.totalScripts > 0 ? (
                   <div className="space-y-8">
-                    {/* STATS CARDS */}
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                       <div className={`${card} rounded-xl p-6 border border-gray-700`}>
                         <p className="text-gray-400 text-sm uppercase font-bold mb-2">Total Scripts</p>
@@ -686,7 +771,6 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* CHARTS */}
                     {analyticsData.nicheData.length > 0 && (
                       <div className={`${card} rounded-xl p-6 border border-gray-700`}>
                         <h3 className="text-xl font-bold mb-4">Scripts por Nicho</h3>
@@ -757,6 +841,138 @@ export default function App() {
                 )}
               </>
             )}
+
+            {currentPage === 'settings' && (
+              <>
+                <h2 className="text-3xl font-bold mb-8">⚙️ Configurações da Conta</h2>
+
+                <div className="space-y-6">
+                  {/* PERFIL */}
+                  <div className={`${card} rounded-xl p-8 border border-gray-700`}>
+                    <h3 className="text-2xl font-bold mb-6 flex items-center gap-2">
+                      👤 Perfil
+                    </h3>
+
+                    <div className="space-y-4 mb-6">
+                      <div>
+                        <label className="block text-sm font-bold text-gray-400 mb-2">Email</label>
+                        <input
+                          type="email"
+                          value={userProfile.email}
+                          disabled
+                          className={`w-full px-4 py-3 rounded-lg border ${input} opacity-50 cursor-not-allowed`}
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Email não pode ser alterado</p>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-bold text-gray-400 mb-2">Nome Completo</label>
+                        <input
+                          type="text"
+                          value={settingsForm.fullName}
+                          onChange={(e) => setSettingsForm(prev => ({ ...prev, fullName: e.target.value }))}
+                          placeholder="Seu nome"
+                          className={`w-full px-4 py-3 rounded-lg border ${input}`}
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={handleUpdateProfile}
+                      disabled={settingsLoading}
+                      className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold py-2 px-6 rounded-lg transition"
+                    >
+                      {settingsLoading ? 'Salvando...' : '💾 Salvar Perfil'}
+                    </button>
+
+                    {settingsMessage && (
+                      <p className={`mt-4 text-sm ${settingsMessage.includes('❌') ? 'text-red-400' : 'text-green-400'}`}>
+                        {settingsMessage}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* SEGURANÇA */}
+                  <div className={`${card} rounded-xl p-8 border border-gray-700`}>
+                    <h3 className="text-2xl font-bold mb-6 flex items-center gap-2">
+                      🔐 Segurança
+                    </h3>
+
+                    <div className="space-y-4 mb-6">
+                      <div>
+                        <label className="block text-sm font-bold text-gray-400 mb-2">Nova Senha</label>
+                        <input
+                          type="password"
+                          value={settingsForm.newPassword}
+                          onChange={(e) => setSettingsForm(prev => ({ ...prev, newPassword: e.target.value }))}
+                          placeholder="Digite uma nova senha"
+                          className={`w-full px-4 py-3 rounded-lg border ${input}`}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-bold text-gray-400 mb-2">Confirmar Senha</label>
+                        <input
+                          type="password"
+                          value={settingsForm.confirmPassword}
+                          onChange={(e) => setSettingsForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                          placeholder="Confirme a senha"
+                          className={`w-full px-4 py-3 rounded-lg border ${input}`}
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={handleUpdateProfile}
+                      disabled={settingsLoading || !settingsForm.newPassword}
+                      className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold py-2 px-6 rounded-lg transition flex items-center gap-2"
+                    >
+                      <Key size={18} /> {settingsLoading ? 'Alterando...' : 'Alterar Senha'}
+                    </button>
+                  </div>
+
+                  {/* PLANO */}
+                  <div className={`${card} rounded-xl p-8 border border-gray-700`}>
+                    <h3 className="text-2xl font-bold mb-6 flex items-center gap-2">
+                      💳 Plano Atual
+                    </h3>
+
+                    <div className="mb-6">
+                      <p className="text-gray-400 mb-2">Você está no plano:</p>
+                      <p className={`text-3xl font-bold bg-gradient-to-r ${PLAN_COLORS[plan]} bg-clip-text text-transparent`}>
+                        {PLAN_NAMES[plan]} {plan === 'free' ? '(Gratuito)' : ''}
+                      </p>
+                    </div>
+
+                    {plan !== 'business' && (
+                      <button
+                        onClick={() => setShowUpgradeModal(true)}
+                        className="bg-gradient-to-r from-yellow-500 to-yellow-600 text-gray-900 font-bold py-2 px-6 rounded-lg hover:opacity-90 transition flex items-center gap-2"
+                      >
+                        <Crown size={18} /> Upgrade para Business
+                      </button>
+                    )}
+                  </div>
+
+                  {/* DELETAR CONTA */}
+                  <div className={`${card} rounded-xl p-8 border border-red-700 bg-red-500 bg-opacity-5`}>
+                    <h3 className="text-2xl font-bold mb-4 flex items-center gap-2 text-red-500">
+                      <AlertCircle size={24} /> Zona de Perigo
+                    </h3>
+
+                    <p className="text-gray-400 mb-6">Deletar sua conta é uma ação irreversível. Todos os seus dados serão removidos permanentemente.</p>
+
+                    <button
+                      onClick={handleDeleteAccount}
+                      disabled={settingsLoading}
+                      className="bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-bold py-2 px-6 rounded-lg transition flex items-center gap-2"
+                    >
+                      <Trash2 size={18} /> {settingsLoading ? 'Deletando...' : 'Deletar Conta Permanentemente'}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </main>
       </div>
@@ -770,13 +986,7 @@ export default function App() {
             </h2>
 
             <div className="grid grid-cols-3 gap-4 mb-8">
-              <div
-                className={`rounded-lg p-6 border-2 transition cursor-pointer ${
-                  plan === 'free'
-                    ? 'border-blue-500 bg-blue-500 bg-opacity-10'
-                    : 'border-gray-700 hover:border-gray-600'
-                }`}
-              >
+              <div className={`rounded-lg p-6 border-2 transition cursor-pointer ${plan === 'free' ? 'border-blue-500 bg-blue-500 bg-opacity-10' : 'border-gray-700 hover:border-gray-600'}`}>
                 <h3 className="text-xl font-bold mb-2">🟢 Free</h3>
                 <p className="text-2xl font-bold mb-4">R$ 0</p>
                 <div className="space-y-2 text-sm mb-4">
@@ -787,20 +997,12 @@ export default function App() {
                 {plan === 'free' && <p className="text-blue-400 text-sm font-bold">Seu plano atual</p>}
               </div>
 
-              <div
-                className={`rounded-lg p-6 border-2 transition cursor-pointer ${
-                  plan === 'pro'
-                    ? 'border-blue-500 bg-blue-500 bg-opacity-10'
-                    : 'border-gray-700 hover:border-gray-600'
-                }`}
-              >
+              <div className={`rounded-lg p-6 border-2 transition cursor-pointer ${plan === 'pro' ? 'border-blue-500 bg-blue-500 bg-opacity-10' : 'border-gray-700 hover:border-gray-600'}`}>
                 <h3 className="text-xl font-bold mb-2">🔵 Pro</h3>
-                <p className="text-2xl font-bold mb-4">
-                  R$ 39<span className="text-sm">/mês</span>
-                </p>
+                <p className="text-2xl font-bold mb-4">R$ 39<span className="text-sm">/mês</span></p>
                 <div className="space-y-2 text-sm mb-4">
                   <p>✓ 50 scripts/mês</p>
-                  <p>✓ Download PDF</p>
+                  <p>✓ Download</p>
                   <p>✓ Analytics</p>
                 </div>
                 {plan === 'pro' && <p className="text-blue-400 text-sm font-bold">Seu plano atual</p>}
@@ -811,21 +1013,13 @@ export default function App() {
                 )}
               </div>
 
-              <div
-                className={`rounded-lg p-6 border-2 transition cursor-pointer ${
-                  plan === 'business'
-                    ? 'border-purple-500 bg-purple-500 bg-opacity-10'
-                    : 'border-gray-700 hover:border-gray-600'
-                }`}
-              >
+              <div className={`rounded-lg p-6 border-2 transition cursor-pointer ${plan === 'business' ? 'border-purple-500 bg-purple-500 bg-opacity-10' : 'border-gray-700 hover:border-gray-600'}`}>
                 <h3 className="text-xl font-bold mb-2">🟣 Business</h3>
-                <p className="text-2xl font-bold mb-4">
-                  R$ 149<span className="text-sm">/mês</span>
-                </p>
+                <p className="text-2xl font-bold mb-4">R$ 149<span className="text-sm">/mês</span></p>
                 <div className="space-y-2 text-sm mb-4">
                   <p>✓ Ilimitado</p>
                   <p>✓ Agendamento</p>
-                  <p>✓ API access</p>
+                  <p>✓ API</p>
                 </div>
                 {plan === 'business' && <p className="text-purple-400 text-sm font-bold">Seu plano atual</p>}
                 {plan !== 'business' && (
