@@ -622,14 +622,15 @@ export default function App() {
     return <Auth onAuthSuccess={() => setUser(true)} />;
   }
 
-  if (showProfileSetup && !userProfile) {
+  if (showProfileSetup) {
     return (
       <ProfileSetup 
         user={user} 
         darkMode={darkMode} 
-        onComplete={() => {
-          loadUserProfile(user.id);
+        onComplete={async () => {
+          await loadUserProfile(user.id);
           setShowProfileSetup(false);
+          setCurrentPage('scripts');
         }} 
       />
     );
