@@ -703,7 +703,6 @@ export default function App() {
       <div className="flex min-h-screen flex-col lg:flex-row">
         {/* SIDEBAR */}
         <aside className={`${card} border-b lg:border-r ${darkMode ? 'border-gray-700' : 'border-blue-100'} w-full lg:w-80 p-4 md:p-6 hidden lg:block overflow-y-auto`}>
-          {/* NAV BUTTONS */}
           <div className="flex flex-col gap-2 mb-6 space-y-2">
             {[
               { id: 'scripts', label: 'Scripts', icon: '📝' },
@@ -726,7 +725,6 @@ export default function App() {
             ))}
           </div>
 
-          {/* PLANO CARD */}
           <div className={`bg-gradient-to-br ${PRICING_PLANS[plan].color} rounded-2xl p-6 mb-6 text-white shadow-xl transform transition hover:scale-105`}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-2xl font-black">
@@ -824,7 +822,6 @@ export default function App() {
         {/* MAIN */}
         <main className="flex-1 p-4 md:p-6 overflow-y-auto">
           <div className="max-w-5xl mx-auto">
-            {/* MESSAGES */}
             {error && (
               <div className={`mb-6 p-4 rounded-xl flex items-start gap-3 animate-in fade-in slide-in-from-top border ${
                 darkMode
@@ -994,7 +991,6 @@ export default function App() {
                             })}
                           </div>
 
-                          {/* HASHTAGS SECTION */}
                           {s.hashtags && s.hashtags.length > 0 && (
                             <div className={`mb-4 p-4 rounded-lg border ${
                               darkMode
@@ -1027,7 +1023,6 @@ export default function App() {
                             </div>
                           )}
 
-                          {/* REFERENCE URLs */}
                           {plan !== 'free' && s.reference_urls && s.reference_urls.length > 0 && (
                             <div className={`mb-4 p-4 rounded-lg border ${
                               darkMode
@@ -1216,7 +1211,6 @@ export default function App() {
                 </h2>
 
                 <div className="space-y-6">
-                  {/* PERFIL */}
                   <div className={`${card} rounded-2xl p-6 md:p-8 border ${darkMode ? 'border-gray-700' : 'border-blue-200'} shadow-lg`}>
                     <h3 className="text-2xl font-bold mb-6">👤 Perfil</h3>
                     <div className="space-y-4 mb-6">
@@ -1258,7 +1252,6 @@ export default function App() {
                     )}
                   </div>
 
-                  {/* SEGURANÇA */}
                   <div className={`${card} rounded-2xl p-6 md:p-8 border ${darkMode ? 'border-gray-700' : 'border-blue-200'} shadow-lg`}>
                     <h3 className="text-2xl font-bold mb-6">🔐 Segurança</h3>
                     <div className="space-y-4 mb-6">
@@ -1296,7 +1289,6 @@ export default function App() {
                     </button>
                   </div>
 
-                  {/* PLANO */}
                   <div className={`${card} rounded-2xl p-6 md:p-8 border ${darkMode ? 'border-gray-700' : 'border-blue-200'} shadow-lg`}>
                     <h3 className="text-2xl font-bold mb-6">💳 Plano Atual</h3>
                     <div className={`bg-gradient-to-r ${PRICING_PLANS[plan].color} bg-clip-text text-transparent text-4xl font-black mb-6`}>
@@ -1312,7 +1304,6 @@ export default function App() {
                     )}
                   </div>
 
-                  {/* DELETE */}
                   {!isAdmin && (
                     <div className={`${card} rounded-2xl p-6 md:p-8 border border-red-700 bg-red-500 ${darkMode ? 'bg-opacity-5' : 'bg-opacity-10'} shadow-lg`}>
                       <h3 className={`text-2xl font-bold mb-4 flex items-center gap-2 ${darkMode ? 'text-red-500' : 'text-red-600'}`}>
@@ -1337,7 +1328,6 @@ export default function App() {
         </main>
       </div>
 
-      {/* UPGRADE MODAL */}
       {showUpgradeModal && !isAdmin && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 backdrop-blur-sm animate-in fade-in">
           <div className={`${card} rounded-3xl p-8 max-w-3xl w-full border ${darkMode ? 'border-gray-700' : 'border-blue-200'} shadow-2xl scale-in`}>
