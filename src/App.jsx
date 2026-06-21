@@ -107,7 +107,6 @@ export default function App() {
 
   const isAdmin = user?.email === 'ianfragalli@hotmail.com';
 
-  // Auto-clear messages
   useEffect(() => {
     if (error) {
       const timer = setTimeout(() => setError(''), 5000);
@@ -299,10 +298,10 @@ export default function App() {
     }
   };
 
-  const generateHashtags = (scriptTitle, plan) => {
+  const generateHashtags = (scriptTitle, userPlan) => {
     const basicHashtags = ['#ReelFlow', '#IA'];
     
-    if (plan === 'free') {
+    if (userPlan === 'free') {
       return basicHashtags;
     }
 
@@ -330,8 +329,8 @@ export default function App() {
     return recommendedHashtags.slice(0, 10);
   };
 
-  const generateReferenceURLs = (scriptTitle, plan) => {
-    if (plan === 'free') {
+  const generateReferenceURLs = (scriptTitle, userPlan) => {
+    if (userPlan === 'free') {
       return [];
     }
 
@@ -348,8 +347,8 @@ export default function App() {
     }));
   };
 
-  const estimateVideoDuration = (script, plan) => {
-    if (plan === 'free') {
+  const estimateVideoDuration = (script, userPlan) => {
+    if (userPlan === 'free') {
       return '3-15 segundos (recomendado)';
     }
 
@@ -968,27 +967,31 @@ export default function App() {
                               { label: '🎯 Gancho (0-3s)', content: s.gancho, id: `gancho-${i}` },
                               { label: '📝 Desenvolvimento', content: s.desenvolvimento, id: `dev-${i}` },
                               { label: '📢 Call-to-Action', content: s.cta, id: `cta-${i}` }
-                            ].map((section, idx) => (
-                              <div key={idx}>
-                                <p className={`text-xs font-bold uppercase mb-2 ${darkMode ? 'text-gray-400' : 'text-blue-600'}`}>
-                                  {section.label}
-                                </p>
-                                <p className={`text-sm leading-relaxed mb-2 ${section.label.includes('Call') ? darkMode ? 'text-blue-400' : 'text-blue-600' : ''} font-semibold`}>
-                                  {section.content}
-                                </p>
-                                <button
-                                  onClick={() => copyToClipboard(section.content, section.id)}
-                                  className={`text-xs flex items-center gap-1 transition transform hover:scale-105 ${
-                                    darkMode
-                                      ? 'text-blue-400 hover:text-blue-300'
-                                      : 'text-blue-600 hover:text-blue-700'
-                                  }`}
-                                >
-                                  <Copy size={14} />
-                                  {copied === section.id ? 'Copiado!' : 'Copiar'}
-                                </button>
-                              </div>
-                            ))}
+                            ].map((section, idx) => {
+                              const isCTA = section.label.includes('Call');
+                              const ctaColor = isCTA ? (darkMode ? 'text-blue-400' : 'text-blue-600') : '';
+                              return (
+                                <div key={idx}>
+                                  <p className={`text-xs font-bold uppercase mb-2 ${darkMode ? 'text-gray-400' : 'text-blue-600'}`}>
+                                    {section.label}
+                                  </p>
+                                  <p className={`text-sm leading-relaxed mb-2 font-semibold ${ctaColor}`}>
+                                    {section.content}
+                                  </p>
+                                  <button
+                                    onClick={() => copyToClipboard(section.content, section.id)}
+                                    className={`text-xs flex items-center gap-1 transition transform hover:scale-105 ${
+                                      darkMode
+                                        ? 'text-blue-400 hover:text-blue-300'
+                                        : 'text-blue-600 hover:text-blue-700'
+                                    }`}
+                                  >
+                                    <Copy size={14} />
+                                    {copied === section.id ? 'Copiado!' : 'Copiar'}
+                                  </button>
+                                </div>
+                              );
+                            })}
                           </div>
 
                           {/* HASHTAGS SECTION */}
@@ -1249,7 +1252,7 @@ export default function App() {
                       {settingsLoading ? '⏳ Salvando...' : '💾 Salvar Perfil'}
                     </button>
                     {settingsMessage && (
-                      <p className={`mt-4 text-sm font-medium ${settingsMessage.includes('❌') ? darkMode ? 'text-red-400' : 'text-red-600' : darkMode ? 'text-green-400' : 'text-green-600'}`}>
+                      <p className={`mt-4 text-sm font-medium ${settingsMessage.includes('❌') ? (darkMode ? 'text-red-400' : 'text-red-600') : (darkMode ? 'text-green-400' : 'text-green-600')}`}>
                         {settingsMessage}
                       </p>
                     )}
