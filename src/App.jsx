@@ -300,14 +300,12 @@ export default function App() {
   };
 
   const generateHashtags = (scriptTitle, plan) => {
-    // Hashtags básicas (Free)
     const basicHashtags = ['#ReelFlow', '#IA'];
     
     if (plan === 'free') {
       return basicHashtags;
     }
 
-    // Hashtags de alto engajamento (Premium/Top)
     const keywords = scriptTitle.toLowerCase().split(' ');
     const hashtagMap = {
       'marketing': ['#MarketingDigital', '#EstrategiaDeMarketing'],
@@ -337,7 +335,6 @@ export default function App() {
       return [];
     }
 
-    // URLs de exemplo (você pode integrar uma API real aqui)
     const referenceURLs = {
       instagram: 'https://instagram.com/explore/tags/' + scriptTitle.replace(/\s+/g, ''),
       youtube: 'https://youtube.com/search?q=' + scriptTitle,
@@ -356,7 +353,6 @@ export default function App() {
       return '3-15 segundos (recomendado)';
     }
 
-    // Estimativa baseada no comprimento do texto
     const totalChars = script.gancho.length + script.desenvolvimento.length + script.cta.length;
     const estimatedSeconds = Math.ceil(totalChars / 10);
     
@@ -399,7 +395,6 @@ export default function App() {
       const data = await response.json();
 
       if (data.success && data.scripts && data.scripts.length > 0) {
-        // Enriquecer scripts com hashtags, URLs e duração
         const enrichedScripts = data.scripts.map(script => ({
           ...script,
           hashtags: generateHashtags(script.titulo, plan),
@@ -601,7 +596,6 @@ export default function App() {
     setCurrentPage('scripts');
   };
 
-  // Cores refinadas
   const bg = darkMode 
     ? 'bg-gray-900' 
     : 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50';
