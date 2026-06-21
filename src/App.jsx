@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Copy, Download, Share2, Heart, Trash2, Menu, X, Moon, Sun } from 'lucide-react';
+import { Copy, Download, Share2, Heart } from 'lucide-react';
 
 export default function App() {
   const [niche, setNiche] = useState('');
@@ -8,16 +8,12 @@ export default function App() {
   const [error, setError] = useState('');
   const [history, setHistory] = useState([]);
   const [favorites, setFavorites] = useState([]);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [darkMode, setDarkMode] = useState(true);
   const [copied, setCopied] = useState(null);
 
-  // Carregar histórico do localStorage
   useEffect(() => {
     const saved = localStorage.getItem('reel_history');
-    const savedFav = localStorage.getItem('reel_favorites');
     if (saved) setHistory(JSON.parse(saved));
-    if (savedFav) setFavorites(JSON.parse(savedFav));
   }, []);
 
   const handleGenerate = async () => {
@@ -28,7 +24,6 @@ export default function App() {
 
     setLoading(true);
     setError('');
-    setScripts([]);
 
     try {
       const response = await fetch('https://reels-automation-pro.vercel.app/api/generate-scripts', {
@@ -41,12 +36,10 @@ export default function App() {
 
       if (data.success && data.scripts.length > 0) {
         setScripts(data.scripts);
-        
-        // Salvar no histórico
         const newHistory = [
-          { niche, scripts: data.scripts, timestamp: new Date().toLocaleString() },
+          { niche, timestamp: new Date().toLocaleString() },
           ...history
-        ].slice(0, 10);
+        ].slice(0, 5);
         setHistory(newHistory);
         localStorage.setItem('reel_history', JSON.stringify(newHistory));
       } else {
@@ -65,99 +58,163 @@ export default function App() {
     setTimeout(() => setCopied(null), 2000);
   };
 
-  const toggleFavorite = (scriptText) => {
-    setFavorites(prev => 
-      prev.includes(scriptText) 
-        ? prev.filter(f => f !== scriptText)
-        : [...prev, scriptText]
-    );
-    localStorage.setItem('reel_favorites', JSON.stringify(favorites));
-  };
-
   const downloadScript = (script) => {
-    const text = `SCRIPT: ${script.titulo}\n\n🎯 GANCHO:\n${script.gancho}\n\n📝 DESENVOLVIMENTO:\n${script.desenvolvimento}\n\n📢 CTA:\n${script.cta}\n\n⏱️ DURAÇÃO: ${script.duracao}\n📈 DIFICULDADE: ${script.dificuldade}`;
+    const text = `SCRIPT: ${script.titulo}\n\nGANCHO:\n${script.gancho}\n\nDESENVOLVIMENTO:\n${script.desenvolvimento}\n\nCTA:\n${script.cta}`;
     const blob = new Blob([text], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `script-${script.titulo.slice(0, 20)}.txt`;
+    a.download = `script.txt`;
     a.click();
   };
 
   const shareScript = (script) => {
-    const text = `Confira este script viral gerado por IA:\n\n${script.titulo}\n\n${script.gancho}`;
-    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
-    window.open(whatsappUrl, '_blank');
+    const text = `${script.titulo}\n\n${script.gancho}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
-  const bg = darkMode ? 'bg-gray-900' : 'bg-gray-50';
-  const textColor = darkMode ? 'text-white' : 'text-gray-900';
-  const cardBg = darkMode ? 'bg-gray-800' : 'bg-white';
-  const inputBg = darkMode ? 'bg-gray-700 text-white' : 'bg-white text-gray-900';
-  const borderColor = darkMode ? 'border-gray-700' : 'border-gray-200';
+  const bg = darkMode ? 'bg-gray-900' : 'bg-white';
+  const text = darkMode ? 'text-white' : 'text-gray-900';
+  const card = darkMode ? 'bg-gray-800' : 'bg-gray-50';
+  const input = darkMode ? 'bg-gray-700 text-white' : 'bg-white text-gray-900 border-gray-300';
 
   return (
-    <div className={`${bg} ${textColor} min-h-screen transition-colors duration-300`}>
-      {/* HEADER */}
-      <header className={`${cardBg} border-b ${borderColor} sticky top-0 z-40`}>
-        <div className="flex items-center justify-between p-4 max-w-7xl mx-auto">
-          <div className="flex items-center gap-2">
-            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="lg:hidden">
-              {sidebarOpen ? <X size={24} /> : <Menu size={24} />}
-            </button>
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">
-              🎬 Reels AI
-            </h1>
-          </div>
-          <button
-            onClick={() => setDarkMode(!darkMode)}
-            className={`p-2 rounded-lg ${darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-200 hover:bg-gray-300'}`}
-          >
-            {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+    <div className={`${bg} ${text} min-h-screen transition-colors`}>
+      <header className={`${card} border-b border-gray-700 sticky top-0 z-40`}>
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+          <h1 className="text-2xl font-bold">🎬 Reels AI Pro</h1>
+          <button onClick={() => setDarkMode(!darkMode)} className="p-2 rounded-lg bg-gray-700">
+            {darkMode ? '☀️' : '🌙'}
           </button>
         </div>
       </header>
 
-      <div className="flex">
-        {/* SIDEBAR */}
-        {sidebarOpen && (
-          <aside className={`${cardBg} border-r ${borderColor} w-64 min-h-screen overflow-y-auto`}>
-            <div className="p-6">
-              {/* HISTÓRICO */}
+      <div className="flex min-h-screen">
+        <aside className={`${card} border-r border-gray-700 w-64 p-6 hidden lg:block`}>
+          <h3 className="font-bold text-gray-400 text-sm mb-4">📋 HISTÓRICO</h3>
+          {history.length === 0 ? (
+            <p className="text-gray-500 text-sm">Nenhuma busca ainda</p>
+          ) : (
+            <div className="space-y-2">
+              {history.map((h, i) => (
+                <button key={i} onClick={() => setNiche(h.niche)} className="w-full text-left p-2 rounded hover:bg-gray-700 text-sm">
+                  <p className="font-medium">{h.niche}</p>
+                  <p className="text-xs text-gray-500">{h.timestamp}</p>
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="mt-8 pt-8 border-t border-gray-700">
+            <h3 className="font-bold text-gray-400 text-sm mb-4">❤️ FAVORITOS</h3>
+            <p className="text-gray-500 text-sm">{favorites.length} script(s) salvos</p>
+          </div>
+
+          <div className="mt-8 pt-8 border-t border-gray-700 bg-gradient-to-br from-blue-900 to-purple-900 p-4 rounded-lg">
+            <h4 className="font-bold mb-2">⭐ Pro</h4>
+            <p className="text-xs text-gray-300 mb-3">Ilimitado + Download</p>
+            <button className="w-full bg-blue-600 text-white font-bold py-2 px-3 rounded text-sm hover:bg-blue-700">
+              Assinar
+            </button>
+          </div>
+        </aside>
+
+        <main className="flex-1 p-6">
+          <div className="max-w-4xl mx-auto">
+            <div className={`${card} rounded-xl p-8 mb-8 border border-gray-700`}>
+              <h2 className="text-3xl font-bold mb-2">Scripts Virais com IA</h2>
+              <p className="text-gray-400 mb-6">Gere 5 scripts prontos para gravar em segundos</p>
+
+              <div className="flex gap-3">
+                <input
+                  type="text"
+                  value={niche}
+                  onChange={(e) => setNiche(e.target.value)}
+                  placeholder="Ex: Marketing, Personal Trainer, Beleza..."
+                  className={`flex-1 px-4 py-3 rounded-lg border ${input}`}
+                  onKeyPress={(e) => e.key === 'Enter' && handleGenerate()}
+                />
+                <button
+                  onClick={handleGenerate}
+                  disabled={loading}
+                  className="bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold py-3 px-6 rounded-lg hover:opacity-90 disabled:opacity-50 transition"
+                >
+                  {loading ? '⏳' : '✨'} {loading ? 'Gerando...' : 'Gerar'}
+                </button>
+              </div>
+
+              {error && <p className="text-red-500 mt-3 text-sm">{error}</p>}
+            </div>
+
+            {scripts.length > 0 && (
               <div>
-                <h3 className="text-sm font-bold uppercase text-gray-400 mb-3">Histórico</h3>
-                {history.length === 0 ? (
-                  <p className="text-sm text-gray-500">Nenhum script gerado ainda</p>
-                ) : (
-                  <div className="space-y-2">
-                    {history.map((item, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => setNiche(item.niche)}
-                        className={`w-full text-left p-3 rounded-lg text-sm transition ${
-                          darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-                        }`}
-                      >
-                        <p className="font-medium truncate">{item.niche}</p>
-                        <p className="text-xs text-gray-400">{item.timestamp}</p>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+                <h2 className="text-2xl font-bold mb-6">📝 {scripts.length} Scripts</h2>
+                <div className="space-y-6">
+                  {scripts.map((s, i) => (
+                    <div key={i} className={`${card} rounded-xl p-6 border-l-4 border-blue-500 border border-gray-700`}>
+                      <div className="flex items-start justify-between mb-4">
+                        <div>
+                          <h3 className="text-xl font-bold mb-2">{s.titulo}</h3>
+                          <div className="flex gap-2">
+                            <span className="px-3 py-1 bg-blue-500 bg-opacity-20 text-blue-300 rounded-full text-xs">⏱️ {s.duracao}</span>
+                            <span className="px-3 py-1 bg-green-500 bg-opacity-20 text-green-300 rounded-full text-xs">📈 {s.dificuldade}</span>
+                          </div>
+                        </div>
+                        <button onClick={() => {
+                          setFavorites(prev => prev.includes(s.titulo) ? prev.filter(f => f !== s.titulo) : [...prev, s.titulo]);
+                        }} className="transition">
+                          <Heart size={24} fill={favorites.includes(s.titulo) ? 'currentColor' : 'none'} className={favorites.includes(s.titulo) ? 'text-red-500' : 'text-gray-500 hover:text-red-500'} />
+                        </button>
+                      </div>
 
-              {/* FAVORITOS */}
-              <div className="mt-8 pt-8 border-t border-gray-700">
-                <h3 className="text-sm font-bold uppercase text-gray-400 mb-3">❤️ Favoritos</h3>
-                {favorites.length === 0 ? (
-                  <p className="text-sm text-gray-500">Nenhum favorito salvo</p>
-                ) : (
-                  <p className="text-sm text-gray-400">{favorites.length} script(s) salvos</p>
-                )}
-              </div>
+                      <div className="space-y-4 mb-6">
+                        <div>
+                          <p className="text-xs font-bold text-gray-400 mb-1">🎯 GANCHO</p>
+                          <p className="mb-2">{s.gancho}</p>
+                          <button onClick={() => copyToClipboard(s.gancho, `g${i}`)} className="text-xs text-blue-400 hover:text-blue-300">
+                            {copied === `g${i}` ? '✓ Copiado' : 'Copiar'}
+                          </button>
+                        </div>
 
-              {/* UPGRADE */}
-              <div className="mt-8 pt-8 border-t border-gray-700">
-                <div className={`p-4 rounded-lg ${darkMode ? 'bg-gradient-to-br from-blue-900 to-purple-900' : 'bg-gradient-to-br from-blue-100 to-purple-100'}`}>
-                  <h3 className="font-bold mb-2">Upgrade Pro</h3>
-                  <p className="text-sm text-gray-400
+                        <div>
+                          <p className="text-xs font-bold text-gray-400 mb-1">📝 DESENVOLVIMENTO</p>
+                          <p className="mb-2">{s.desenvolvimento}</p>
+                          <button onClick={() => copyToClipboard(s.desenvolvimento, `d${i}`)} className="text-xs text-blue-400 hover:text-blue-300">
+                            {copied === `d${i}` ? '✓ Copiado' : 'Copiar'}
+                          </button>
+                        </div>
+
+                        <div>
+                          <p className="text-xs font-bold text-gray-400 mb-1">📢 CTA</p>
+                          <p className="text-blue-400 font-semibold mb-2">{s.cta}</p>
+                          <button onClick={() => copyToClipboard(s.cta, `c${i}`)} className="text-xs text-blue-400 hover:text-blue-300">
+                            {copied === `c${i}` ? '✓ Copiado' : 'Copiar'}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-3 pt-4 border-t border-gray-700">
+                        <button onClick={() => downloadScript(s)} className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm flex items-center justify-center gap-2">
+                          <Download size={16} /> Baixar
+                        </button>
+                        <button onClick={() => shareScript(s)} className="flex-1 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm flex items-center justify-center gap-2">
+                          <Share2 size={16} /> WhatsApp
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {!scripts.length && !loading && (
+              <div className={`${card} rounded-xl p-12 text-center border border-gray-700`}>
+                <p className="text-gray-400">Digite um nicho para começar 🎬</p>
+              </div>
+            )}
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}
