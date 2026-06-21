@@ -1,11 +1,95 @@
 import { useState, useEffect } from 'react';
-import { Copy, Download, Share2, Heart, Zap, Lock, Crown, BarChart3, FileText, Settings, LogOut, Mail, Key, Trash2, AlertCircle, Loader, ExternalLink, Clock, Tag } from 'lucide-react';
+import { Copy, Download, Share2, Heart, Zap, Lock, Crown, BarChart3, FileText, Settings, LogOut, Mail, Key, Trash2, AlertCircle, Loader, ExternalLink, Clock, Tag, Lightbulb, TrendingUp } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { supabase } from './supabaseClient';
 import Auth from './Auth';
 import Pricing from './Pricing';
 import ProfileSetup from './ProfileSetup';
 import Admin from './Admin';
+
+const INSIGHTS_TEMPLATES = {
+  'marketing': {
+    title: '📊 Marketing Digital em 2026',
+    insights: [
+      '🔥 Tendência: Short-form video está dominando - Reels ganham 3x mais engagement que posts estáticos',
+      '💡 Dica: Sempre use hooks nos primeiros 0.5s (50% das pessoas desistem antes de 1 segundo)',
+      '📈 Trend: Conteúdo educativo + entretenimento = melhor performance em 2026',
+      '🎯 Nicho quente: Personal branding para pequenos negócios está em alta'
+    ]
+  },
+  'beleza': {
+    title: '💄 Beleza & Skincare em Destaque',
+    insights: [
+      '🌟 Trend 2026: Skincare minimalista ganha espaço vs rotinas complexas',
+      '💅 Nicho: Beleza natural e sustentável está crescendo 45% ao ano',
+      '📱 Formato: Transformações visuais (antes/depois) geram 5x mais saves',
+      '💄 Insight: Tutoriais rápidos (15s) + produto final atraem mais público'
+    ]
+  },
+  'fitness': {
+    title: '💪 Fitness & Wellness',
+    insights: [
+      '🏋️ Trend: Home workouts continuam em alta - sem necessidade de academia',
+      '⚡ Formato que funciona: Desafios de 30 dias com transformações visuais',
+      '🥗 Nicho crescente: Nutrição + fitness (combinação perfeita)',
+      '📊 Insight: Vídeos com música energética geram 200% mais engagement'
+    ]
+  },
+  'educação': {
+    title: '📚 Educação Online',
+    insights: [
+      '🎓 Trend: Micro-learning (aulas de 15-30s) está transformando o setor',
+      '💡 Formato: Resolução de problemas comuns gera muito engajamento',
+      '📱 Nicho: Cursos gratuitos curtos como funil para produtos premium',
+      '✅ Insight: Pessoas retêm 80% mais com visual + áudio simultâneos'
+    ]
+  },
+  'tecnologia': {
+    title: '🚀 Tech & Inovação',
+    insights: [
+      '🤖 Trend: IA está em todos os Reels - explique como usar ferramentas IA',
+      '⚙️ Formato: Tutorial técnico simplificado atrai audiência não-técnica',
+      '📲 Nicho: Reviews de apps + dicas de produtividade estão em alta',
+      '🔮 Insight: Conteúdo futurista (IA, cripto, Web3) gera curiosidade'
+    ]
+  },
+  'culinária': {
+    title: '🍳 Gastronomia & Receitas',
+    insights: [
+      '🥘 Trend: Receitas fáceis (3-5 ingredientes) ganham milhões de views',
+      '⏱️ Formato: Recipe videos de 15-20s são mais eficazes que longas',
+      '💰 Nicho: Comida saudável + prática para correria do dia a dia',
+      '🎬 Insight: ASMR culinário (sons de cortes, sizzle) vira viral rapidinho'
+    ]
+  },
+  'moda': {
+    title: '👗 Moda & Styling',
+    insights: [
+      '👕 Trend: Sustentabilidade em moda está crescendo (roupa vintage)',
+      '✨ Formato: Lookbook rápido (2-3 looks diferentes em 15s)',
+      '💄 Nicho: Dicas para esconder imperfeições + potencializar qualidades',
+      '📸 Insight: Reels mostrando o mesmo look em 3+ ocasiões diferentes'
+    ]
+  },
+  'viagem': {
+    title: '✈️ Viagem & Turismo',
+    insights: [
+      '🗺️ Trend: Travel vlogging continua em alta - especialmente dicas locais',
+      '💰 Formato: Dicas de economia em viagens atraem pessoas planejando',
+      '🌍 Nicho: Viagens locais (staycation) estão crescendo pós-pandemia',
+      '📍 Insight: Transições geográficas (jump cuts entre lugares) viralizam'
+    ]
+  },
+  'lifestyle': {
+    title: '🌟 Lifestyle & Bem-estar',
+    insights: [
+      '🧘 Trend: Mental health + self-care content está em crescimento acelerado',
+      '⚖️ Formato: Morning/evening routines viralizam - pessoas copiam',
+      '🏡 Nicho: Home organization + decoração DIY ganham muita tração',
+      '✨ Insight: Conteúdo aspiracional que parece acessível funciona melhor'
+    ]
+  }
+};
 
 const PRICING_PLANS = {
   free: {
@@ -160,12 +244,13 @@ export default function App() {
         .eq('user_id', userId)
         .single();
 
-      if (err && err.code !== 'PGRST116') {
-        console.error('Erro ao carregar perfil:', err);
-        setShowProfileSetup(true);
-      } else if (data) {
+      if (data) {
         setUserProfile(data);
+        setShowProfileSetup(false);
+      } else if (err && err.code === 'PGRST116') {
+        setShowProfileSetup(true);
       } else {
+        console.error('Erro ao carregar perfil:', err);
         setShowProfileSetup(true);
       }
     } catch (err) {
@@ -627,10 +712,22 @@ export default function App() {
       <ProfileSetup 
         user={user} 
         darkMode={darkMode} 
-        onComplete={async () => {
-          await loadUserProfile(user.id);
-          setShowProfileSetup(false);
-          setCurrentPage('scripts');
+        onComplete={async (profileData) => {
+          try {
+            await supabase.from('user_profiles').insert([
+              {
+                user_id: user.id,
+                ...profileData
+              }
+            ]);
+            await loadUserProfile(user.id);
+            setShowProfileSetup(false);
+            setCurrentPage('scripts');
+            setSuccess('✅ Perfil criado com sucesso!');
+          } catch (err) {
+            console.error('Erro ao salvar perfil:', err);
+            setError('Erro ao salvar perfil. Tente novamente.');
+          }
         }} 
       />
     );
@@ -643,6 +740,9 @@ export default function App() {
   const creditLimit = PLAN_LIMITS[plan];
   const creditPercentage = isAdmin ? 100 : (creditsUsed / creditLimit) * 100;
   const creditsRemaining = isAdmin ? '∞' : Math.max(0, creditLimit - creditsUsed);
+  
+  const nicheKey = niche.toLowerCase().split(' ')[0];
+  const nicheInsights = INSIGHTS_TEMPLATES[nicheKey] || null;
 
   return (
     <div className={`${bg} ${text} min-h-screen transition-colors duration-300`}>
@@ -909,6 +1009,33 @@ export default function App() {
                     </div>
                   )}
                 </div>
+
+                {plan !== 'free' && nicheInsights && niche && !scripts.length && (
+                  <div className={`${card} rounded-3xl p-6 md:p-8 mb-8 border-l-4 border-green-500 border ${
+                    darkMode ? 'border-gray-700' : 'border-green-200'
+                  } shadow-lg bg-gradient-to-br ${darkMode ? 'from-green-500 from-opacity-5' : 'from-green-50'}`}>
+                    <div className="flex items-start gap-4">
+                      <div className="text-4xl flex-shrink-0">💡</div>
+                      <div className="flex-1">
+                        <h3 className={`text-2xl font-black mb-4 ${darkMode ? 'text-green-400' : 'text-green-700'}`}>
+                          {nicheInsights.title}
+                        </h3>
+                        <div className="space-y-3">
+                          {nicheInsights.insights.map((insight, idx) => (
+                            <div key={idx} className={`p-3 rounded-lg ${darkMode ? 'bg-gray-700 bg-opacity-50' : 'bg-white bg-opacity-50'}`}>
+                              <p className={`text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                                {insight}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                        <p className={`text-xs mt-4 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                          ✨ Insights exclusivos para assinantes Premium e Top
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {scripts.length > 0 && (
                   <div>
