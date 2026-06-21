@@ -3,6 +3,7 @@ import { Copy, Download, Share2, Heart, Zap, Lock, Crown, BarChart3, FileText, S
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { supabase } from './supabaseClient';
 import Auth from './Auth';
+import Pricing from './Pricing';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -414,6 +415,9 @@ export default function App() {
   }
 
   if (!user) {
+    if (currentPage === 'pricing') {
+      return <Pricing onSelectPlan={(planId) => setCurrentPage('scripts')} darkMode={darkMode} onNavigate={(page) => setCurrentPage(page)} />;
+    }
     return <Auth onAuthSuccess={() => setUser(true)} />;
   }
 
@@ -433,6 +437,12 @@ export default function App() {
                 {plan === 'free' ? '🟢' : plan === 'pro' ? '🔵' : '🟣'} {PLAN_NAMES[plan].toUpperCase()}
               </p>
             </div>
+            <button
+              onClick={() => setCurrentPage('pricing')}
+              className="px-4 py-2 text-sm font-bold bg-gray-700 hover:bg-gray-600 rounded-lg transition"
+            >
+              💳 Planos
+            </button>
             <button
               onClick={() => setDarkMode(!darkMode)}
               className="p-2 rounded-lg bg-gray-700 hover:bg-gray-600"
