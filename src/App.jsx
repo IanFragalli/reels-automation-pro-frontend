@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Copy, Download, Share2, Heart, Zap, Lock, Crown, BarChart3, FileText, Settings, LogOut, Mail, Key, Trash2, AlertCircle, Loader, ExternalLink, Clock, Tag, Lightbulb, Menu, X, ChevronLeft } from 'lucide-react';
+import { Copy, Download, Share2, Heart, Zap, Lock, Crown, BarChart3, FileText, Settings, LogOut, Mail, Key, Trash2, AlertCircle, Loader, ExternalLink, Clock, Tag, Lightbulb, Menu, X, ChevronLeft, Edit2, Save } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { supabase } from './supabaseClient';
 import Auth from './Auth';
 import Pricing from './Pricing';
-import ProfileSetup from './ProfileSetup';
 import Admin from './Admin';
 
 const INSIGHTS_TEMPLATES = {
@@ -151,12 +150,13 @@ const PLAN_LIMITS = {
 
 const COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4', '#6366f1'];
 
+const GENDERS = ['masculino', 'feminino', 'neutro', 'prefiro não responder'];
+const INTERESTS = ['Marketing Digital', 'E-commerce', 'Beleza', 'Moda', 'Fitness', 'Saúde', 'Educação', 'Culinária', 'Viagem', 'Tecnologia', 'Games', 'Música', 'Lifestyle', 'Desenvolvimento Pessoal', 'Humor'];
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [userProfile, setUserProfile] = useState(null);
-  const [showProfileSetup, setShowProfileSetup] = useState(false);
-  const [profileCompleted, setProfileCompleted] = useState(false);
   
   const [niche, setNiche] = useState('');
   const [scripts, setScripts] = useState([]);
@@ -172,12 +172,22 @@ export default function App() {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [currentPage, setCurrentPage] = useState('scripts');
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [editingProfile, setEditingProfile] = useState(false);
   
   const [settingsForm, setSettingsForm] = useState({
     fullName: '',
     newPassword: '',
     confirmPassword: ''
   });
+
+  const [profileForm, setProfileForm] = useState({
+    age: '',
+    gender: '',
+    city: '',
+    bio: '',
+    interests: []
+  });
+
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState('');
   
@@ -225,7 +235,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (user && profileCompleted) {
+    if (user && userProfile) {
       if (isAdmin) {
         setPlan('top');
         setCreditsUsed(0);
@@ -236,7 +246,7 @@ export default function App() {
       loadCreditsUsed();
       loadAnalytics();
     }
-  }, [user, isAdmin, profileCompleted]);
+  }, [user, isAdmin, userProfile]);
 
   const loadUserProfile = async (userId) => {
     try {
@@ -248,20 +258,65 @@ export default function App() {
 
       if (data) {
         setUserProfile(data);
-        setShowProfileSetup(false);
-        setProfileCompleted(true);
-      } else if (err && err.code === 'PGRST116') {
-        setShowProfileSetup(true);
-        setProfileCompleted(false);
+        setProfileForm({
+          age: data.age || '',
+          gender: data.gender || '',
+          city: data.city || '',
+          bio: data.bio || '',
+          interests: data.interests || []
+        });
       } else {
-        console.error('Erro ao carregar perfil:', err);
-        setShowProfileSetup(true);
-        setProfileCompleted(false);
+        setUserProfile(null);
       }
     } catch (err) {
       console.error('Erro ao carregar perfil:', err);
-      setShowProfileSetup(true);
-      setProfileCompleted(false);
+      setUserProfile(null);
+    }
+  };
+
+  const saveProfile = async () => {
+    setSettingsLoading(true);
+    setSettingsMessage('');
+
+    try {
+      if (userProfile) {
+        const { error } = await supabase
+          .from('user_profiles')
+          .update({
+            age: profileForm.age ? parseInt(profileForm.age) : null,
+            gender: profileForm.gender,
+            city: profileForm.city,
+            bio: profileForm.bio,
+            interests: profileForm.interests
+          })
+          .eq('user_id', user.id);
+
+        if (error) throw error;
+        setSettingsMessage('✅ Perfil atualizado com sucesso!');
+      } else {
+        const { error } = await supabase
+          .from('user_profiles')
+          .insert([
+            {
+              user_id: user.id,
+              age: profileForm.age ? parseInt(profileForm.age) : null,
+              gender: profileForm.gender,
+              city: profileForm.city,
+              bio: profileForm.bio,
+              interests: profileForm.interests
+            }
+          ]);
+
+        if (error) throw error;
+        await loadUserProfile(user.id);
+        setSettingsMessage('✅ Perfil criado com sucesso!');
+      }
+      setEditingProfile(false);
+    } catch (err) {
+      console.error('Erro ao salvar perfil:', err);
+      setSettingsMessage(`❌ Erro ao salvar: ${err.message}`);
+    } finally {
+      setSettingsLoading(false);
     }
   };
 
@@ -558,7 +613,7 @@ export default function App() {
     }
   };
 
-  const handleUpdateProfile = async () => {
+  const handleUpdateAuthProfile = async () => {
     setSettingsLoading(true);
     setSettingsMessage('');
 
@@ -722,36 +777,6 @@ export default function App() {
 
   if (!user) {
     return <Auth onAuthSuccess={() => setUser(true)} />;
-  }
-
-  if (showProfileSetup && !profileCompleted) {
-    return (
-      <ProfileSetup 
-        user={user} 
-        darkMode={darkMode} 
-        onComplete={async (profileData) => {
-          try {
-            const { error } = await supabase.from('user_profiles').insert([
-              {
-                user_id: user.id,
-                ...profileData
-              }
-            ]);
-
-            if (error) throw error;
-
-            await loadUserProfile(user.id);
-            setShowProfileSetup(false);
-            setProfileCompleted(true);
-            setCurrentPage('scripts');
-            setSuccess('✅ Perfil criado com sucesso!');
-          } catch (err) {
-            console.error('Erro ao salvar perfil:', err);
-            setError('Erro ao salvar perfil. Tente novamente.');
-          }
-        }} 
-      />
-    );
   }
 
   if (isAdmin && currentPage === 'admin') {
@@ -1008,7 +1033,7 @@ export default function App() {
                       className="bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold py-3 px-6 rounded-xl hover:opacity-90 disabled:opacity-50 transition transform hover:scale-105 flex items-center justify-center gap-2 whitespace-nowrap shadow-lg"
                     >
                       {appLoading ? <Loader size={18} className="animate-spin" /> : '✨'}
-                      {appLoading ? 'Gerando...' : 'Gerar'}
+                      {appLoading ? 'Gerando...' : 'Começar'}
                     </button>
                   </div>
 
@@ -1386,8 +1411,182 @@ export default function App() {
                 </h2>
 
                 <div className="space-y-6">
+                  {editingProfile ? (
+                    <div className={`${card} rounded-2xl p-6 md:p-8 border ${darkMode ? 'border-gray-700' : 'border-blue-200'} shadow-lg`}>
+                      <div className="flex items-center justify-between mb-6">
+                        <h3 className="text-2xl font-bold">👤 Editar Perfil</h3>
+                        <button
+                          onClick={() => setEditingProfile(false)}
+                          className={`p-2 rounded-lg transition ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-blue-100'}`}
+                        >
+                          <X size={20} />
+                        </button>
+                      </div>
+
+                      <div className="space-y-4 mb-6">
+                        <div>
+                          <label className={`block text-sm font-bold mb-2 ${darkMode ? 'text-gray-400' : 'text-blue-600'}`}>
+                            Idade
+                          </label>
+                          <input
+                            type="number"
+                            value={profileForm.age}
+                            onChange={(e) => setProfileForm(prev => ({ ...prev, age: e.target.value }))}
+                            placeholder="Sua idade"
+                            className={`w-full px-4 py-3 rounded-lg border ${input} transition focus:ring-2 focus:ring-blue-500`}
+                          />
+                        </div>
+
+                        <div>
+                          <label className={`block text-sm font-bold mb-2 ${darkMode ? 'text-gray-400' : 'text-blue-600'}`}>
+                            Gênero
+                          </label>
+                          <select
+                            value={profileForm.gender}
+                            onChange={(e) => setProfileForm(prev => ({ ...prev, gender: e.target.value }))}
+                            className={`w-full px-4 py-3 rounded-lg border ${input} transition focus:ring-2 focus:ring-blue-500`}
+                          >
+                            <option value="">Selecione</option>
+                            {GENDERS.map(g => (
+                              <option key={g} value={g}>{g.charAt(0).toUpperCase() + g.slice(1)}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className={`block text-sm font-bold mb-2 ${darkMode ? 'text-gray-400' : 'text-blue-600'}`}>
+                            Cidade
+                          </label>
+                          <input
+                            type="text"
+                            value={profileForm.city}
+                            onChange={(e) => setProfileForm(prev => ({ ...prev, city: e.target.value }))}
+                            placeholder="Sua cidade"
+                            className={`w-full px-4 py-3 rounded-lg border ${input} transition focus:ring-2 focus:ring-blue-500`}
+                          />
+                        </div>
+
+                        <div>
+                          <label className={`block text-sm font-bold mb-2 ${darkMode ? 'text-gray-400' : 'text-blue-600'}`}>
+                            Bio
+                          </label>
+                          <textarea
+                            value={profileForm.bio}
+                            onChange={(e) => setProfileForm(prev => ({ ...prev, bio: e.target.value }))}
+                            placeholder="Fale sobre você"
+                            rows="3"
+                            className={`w-full px-4 py-3 rounded-lg border ${input} transition focus:ring-2 focus:ring-blue-500`}
+                          />
+                        </div>
+
+                        <div>
+                          <label className={`block text-sm font-bold mb-2 ${darkMode ? 'text-gray-400' : 'text-blue-600'}`}>
+                            Interesses
+                          </label>
+                          <div className="grid grid-cols-2 gap-2">
+                            {INTERESTS.map(interest => (
+                              <button
+                                key={interest}
+                                onClick={() => {
+                                  setProfileForm(prev => {
+                                    const interests = prev.interests || [];
+                                    if (interests.includes(interest)) {
+                                      return { ...prev, interests: interests.filter(i => i !== interest) };
+                                    } else {
+                                      return { ...prev, interests: [...interests, interest] };
+                                    }
+                                  });
+                                }}
+                                className={`p-2 rounded-lg text-sm font-medium transition ${
+                                  profileForm.interests?.includes(interest)
+                                    ? 'bg-blue-600 text-white'
+                                    : darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-blue-100 hover:bg-blue-200 text-blue-900'
+                                }`}
+                              >
+                                {interest}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-3">
+                        <button
+                          onClick={saveProfile}
+                          disabled={settingsLoading}
+                          className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold py-3 px-6 rounded-lg transition transform hover:scale-105 flex items-center justify-center gap-2"
+                        >
+                          <Save size={18} /> {settingsLoading ? 'Salvando...' : 'Salvar Perfil'}
+                        </button>
+                        <button
+                          onClick={() => setEditingProfile(false)}
+                          className={`flex-1 font-bold py-3 px-6 rounded-lg transition ${darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-blue-100 hover:bg-blue-200 text-blue-900'}`}
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+
+                      {settingsMessage && (
+                        <p className={`mt-4 text-sm font-medium ${settingsMessage.includes('❌') ? (darkMode ? 'text-red-400' : 'text-red-600') : (darkMode ? 'text-green-400' : 'text-green-600')}`}>
+                          {settingsMessage}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className={`${card} rounded-2xl p-6 md:p-8 border ${darkMode ? 'border-gray-700' : 'border-blue-200'} shadow-lg`}>
+                      <div className="flex items-center justify-between mb-6">
+                        <h3 className="text-2xl font-bold">👤 Meu Perfil</h3>
+                        <button
+                          onClick={() => setEditingProfile(true)}
+                          className={`p-2 rounded-lg transition ${darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-blue-100 hover:bg-blue-200'}`}
+                        >
+                          <Edit2 size={20} />
+                        </button>
+                      </div>
+
+                      {userProfile ? (
+                        <div className="space-y-3">
+                          <div>
+                            <p className={`text-xs font-bold uppercase ${darkMode ? 'text-gray-400' : 'text-blue-600'}`}>Idade</p>
+                            <p className="text-lg font-semibold">{userProfile.age || 'Não informado'}</p>
+                          </div>
+                          <div>
+                            <p className={`text-xs font-bold uppercase ${darkMode ? 'text-gray-400' : 'text-blue-600'}`}>Gênero</p>
+                            <p className="text-lg font-semibold capitalize">{userProfile.gender || 'Não informado'}</p>
+                          </div>
+                          <div>
+                            <p className={`text-xs font-bold uppercase ${darkMode ? 'text-gray-400' : 'text-blue-600'}`}>Cidade</p>
+                            <p className="text-lg font-semibold">{userProfile.city || 'Não informado'}</p>
+                          </div>
+                          <div>
+                            <p className={`text-xs font-bold uppercase ${darkMode ? 'text-gray-400' : 'text-blue-600'}`}>Bio</p>
+                            <p className="text-sm">{userProfile.bio || 'Não informado'}</p>
+                          </div>
+                          <div>
+                            <p className={`text-xs font-bold uppercase mb-2 ${darkMode ? 'text-gray-400' : 'text-blue-600'}`}>Interesses</p>
+                            <div className="flex gap-2 flex-wrap">
+                              {userProfile.interests && userProfile.interests.length > 0 ? (
+                                userProfile.interests.map((interest, i) => (
+                                  <span key={i} className={`px-3 py-1 rounded-full text-xs font-semibold ${darkMode ? 'bg-blue-600 text-blue-100' : 'bg-blue-200 text-blue-800'}`}>
+                                    {interest}
+                                  </span>
+                                ))
+                              ) : (
+                                <p className={darkMode ? 'text-gray-500' : 'text-gray-400'}>Nenhum interesse informado</p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className={`text-center py-6 ${darkMode ? 'text-gray-400' : 'text-blue-600'}`}>
+                          Perfil não criado ainda. Clique em editar para criar!
+                        </p>
+                      )}
+                    </div>
+                  )}
+
                   <div className={`${card} rounded-2xl p-6 md:p-8 border ${darkMode ? 'border-gray-700' : 'border-blue-200'} shadow-lg`}>
-                    <h3 className="text-2xl font-bold mb-6">👤 Perfil</h3>
+                    <h3 className="text-2xl font-bold mb-6">👤 Conta</h3>
                     <div className="space-y-4 mb-6">
                       <div>
                         <label className={`block text-sm font-bold mb-2 ${darkMode ? 'text-gray-400' : 'text-blue-600'}`}>
@@ -1414,17 +1613,12 @@ export default function App() {
                       </div>
                     </div>
                     <button
-                      onClick={handleUpdateProfile}
+                      onClick={handleUpdateAuthProfile}
                       disabled={settingsLoading}
                       className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold py-2 px-6 rounded-lg transition transform hover:scale-105"
                     >
-                      {settingsLoading ? '⏳ Salvando...' : '💾 Salvar Perfil'}
+                      {settingsLoading ? '⏳ Salvando...' : '💾 Salvar'}
                     </button>
-                    {settingsMessage && (
-                      <p className={`mt-4 text-sm font-medium ${settingsMessage.includes('❌') ? (darkMode ? 'text-red-400' : 'text-red-600') : (darkMode ? 'text-green-400' : 'text-green-600')}`}>
-                        {settingsMessage}
-                      </p>
-                    )}
                   </div>
 
                   <div className={`${card} rounded-2xl p-6 md:p-8 border ${darkMode ? 'border-gray-700' : 'border-blue-200'} shadow-lg`}>
@@ -1456,7 +1650,7 @@ export default function App() {
                       </div>
                     </div>
                     <button
-                      onClick={handleUpdateProfile}
+                      onClick={handleUpdateAuthProfile}
                       disabled={settingsLoading || !settingsForm.newPassword}
                       className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold py-2 px-6 rounded-lg transition transform hover:scale-105 flex items-center gap-2"
                     >
