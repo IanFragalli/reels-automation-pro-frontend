@@ -1,92 +1,84 @@
 import { useState, useEffect } from 'react';
-import { Copy, Download, Share2, Heart, Zap, Lock, Crown, BarChart3, FileText, Settings, LogOut, Mail, Key, Trash2, AlertCircle, Loader, ExternalLink, Clock, Tag, Lightbulb, Menu, X, ChevronLeft, Edit2, Save } from 'lucide-react';
+import { Copy, Download, Share2, Heart, Zap, Lock, Crown, BarChart3, FileText, Settings, LogOut, Mail, Key, Trash2, AlertCircle, Loader, ExternalLink, Clock, Tag, Lightbulb, Menu, X, ChevronLeft, Edit2, Save, RefreshCw, Sparkles } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { supabase } from './supabaseClient';
 import Auth from './Auth';
 import Pricing from './Pricing';
 import Admin from './Admin';
 
-const INSIGHTS_TEMPLATES = {
-  'marketing': {
-    title: '📊 Marketing Digital em 2026',
-    insights: [
-      '🔥 Tendência: Short-form video está dominando - Reels ganham 3x mais engagement que posts estáticos',
-      '💡 Dica: Sempre use hooks nos primeiros 0.5s (50% das pessoas desistem antes de 1 segundo)',
-      '📈 Trend: Conteúdo educativo + entretenimento = melhor performance em 2026',
-      '🎯 Nicho quente: Personal branding para pequenos negócios está em alta'
-    ]
+const SCRIPT_TEMPLATES = {
+  'tutorial': {
+    name: 'Tutorial',
+    emoji: '🎓',
+    structure: (topic) => ({
+      gancho: `Aprenda a ${topic} em 3 passos simples`,
+      desenvolvimento: `Passo 1: [...]\nPasso 2: [...]\nPasso 3: [...]`,
+      cta: `Salve este vídeo para assistir depois! ↙️`
+    })
   },
-  'beleza': {
-    title: '💄 Beleza & Skincare em Destaque',
-    insights: [
-      '🌟 Trend 2026: Skincare minimalista ganha espaço vs rotinas complexas',
-      '💅 Nicho: Beleza natural e sustentável está crescendo 45% ao ano',
-      '📱 Formato: Transformações visuais (antes/depois) geram 5x mais saves',
-      '💄 Insight: Tutoriais rápidos (15s) + produto final atraem mais público'
-    ]
+  'tendencia': {
+    name: 'Tendência Viral',
+    emoji: '🔥',
+    structure: (topic) => ({
+      gancho: `A tendência de ${topic} que TODOS estão fazendo agora`,
+      desenvolvimento: `Por que está viralizando? Porque ${topic} resolve o problema de...`,
+      cta: `Qual é seu favorito? Comenta aí! 👇`
+    })
   },
-  'fitness': {
-    title: '💪 Fitness & Wellness',
-    insights: [
-      '🏋️ Trend: Home workouts continuam em alta - sem necessidade de academia',
-      '⚡ Formato que funciona: Desafios de 30 dias com transformações visuais',
-      '🥗 Nicho crescente: Nutrição + fitness (combinação perfeita)',
-      '📊 Insight: Vídeos com música energética geram 200% mais engagement'
-    ]
+  'dica': {
+    name: 'Dica Rápida',
+    emoji: '💡',
+    structure: (topic) => ({
+      gancho: `Dica que ninguém te contou sobre ${topic}`,
+      desenvolvimento: `A maioria faz errado. A forma correta é...`,
+      cta: `Você já conhecia? Comenta! 💬`
+    })
   },
-  'educação': {
-    title: '📚 Educação Online',
-    insights: [
-      '🎓 Trend: Micro-learning (aulas de 15-30s) está transformando o setor',
-      '💡 Formato: Resolução de problemas comuns gera muito engajamento',
-      '📱 Nicho: Cursos gratuitos curtos como funil para produtos premium',
-      '✅ Insight: Pessoas retêm 80% mais com visual + áudio simultâneos'
-    ]
+  'comparacao': {
+    name: 'Comparação',
+    emoji: '⚖️',
+    structure: (topic) => ({
+      gancho: `${topic} vs ${topic}: Qual é melhor?`,
+      desenvolvimento: `Opção A: Vantagens [...] Desvantagens [...]
+Opção B: Vantagens [...] Desvantagens [...]`,
+      cta: `Qual você escolheria? 🤔`
+    })
   },
-  'tecnologia': {
-    title: '🚀 Tech & Inovação',
-    insights: [
-      '🤖 Trend: IA está em todos os Reels - explique como usar ferramentas IA',
-      '⚙️ Formato: Tutorial técnico simplificado atrai audiência não-técnica',
-      '📲 Nicho: Reviews de apps + dicas de produtividade estão em alta',
-      '🔮 Insight: Conteúdo futurista (IA, cripto, Web3) gera curiosidade'
-    ]
+  'antes_depois': {
+    name: 'Antes/Depois',
+    emoji: '✨',
+    structure: (topic) => ({
+      gancho: `Veja a transformação em ${topic}`,
+      desenvolvimento: `ANTES: [...]\nDEPOIS: [...]\nComo consegui: [...]`,
+      cta: `Quer aprender também? Acesse [link] 🔗`
+    })
   },
-  'culinária': {
-    title: '🍳 Gastronomia & Receitas',
-    insights: [
-      '🥘 Trend: Receitas fáceis (3-5 ingredientes) ganham milhões de views',
-      '⏱️ Formato: Recipe videos de 15-20s são mais eficazes que longas',
-      '💰 Nicho: Comida saudável + prática para correria do dia a dia',
-      '🎬 Insight: ASMR culinário (sons de cortes, sizzle) vira viral rapidinho'
-    ]
+  'resposta': {
+    name: 'Resposta a Dúvida',
+    emoji: '❓',
+    structure: (topic) => ({
+      gancho: `Respondendo: ${topic}`,
+      desenvolvimento: `A resposta que você procura é... [explicação clara]`,
+      cta: `Ficou claro? Comenta sua dúvida! ⬇️`
+    })
   },
-  'moda': {
-    title: '👗 Moda & Styling',
-    insights: [
-      '👕 Trend: Sustentabilidade em moda está crescendo (roupa vintage)',
-      '✨ Formato: Lookbook rápido (2-3 looks diferentes em 15s)',
-      '💄 Nicho: Dicas para esconder imperfeições + potencializar qualidades',
-      '📸 Insight: Reels mostrando o mesmo look em 3+ ocasiões diferentes'
-    ]
+  'mini_palestra': {
+    name: 'Mini Palestra',
+    emoji: '🎤',
+    structure: (topic) => ({
+      gancho: `${topic}: O que você PRECISA saber`,
+      desenvolvimento: `Ponto 1: [...]\nPonto 2: [...]\nPonto 3: [...]`,
+      cta: `Quer aprofundar? Vamos conversar! 💬`
+    })
   },
-  'viagem': {
-    title: '✈️ Viagem & Turismo',
-    insights: [
-      '🗺️ Trend: Travel vlogging continua em alta - especialmente dicas locais',
-      '💰 Formato: Dicas de economia em viagens atraem pessoas planejando',
-      '🌍 Nicho: Viagens locais (staycation) estão crescendo pós-pandemia',
-      '📍 Insight: Transições geográficas (jump cuts entre lugares) viralizam'
-    ]
-  },
-  'lifestyle': {
-    title: '🌟 Lifestyle & Bem-estar',
-    insights: [
-      '🧘 Trend: Mental health + self-care content está em crescimento acelerado',
-      '⚖️ Formato: Morning/evening routines viralizam - pessoas copiam',
-      '🏡 Nicho: Home organization + decoração DIY ganham muita tração',
-      '✨ Insight: Conteúdo aspiracional que parece acessível funciona melhor'
-    ]
+  'motivacao': {
+    name: 'Motivacional',
+    emoji: '💪',
+    structure: (topic) => ({
+      gancho: `Se você quer ${topic}, pare de pensar e comece a agir`,
+      desenvolvimento: `A verdade é que... [insight motivacional sobre topic]`,
+      cta: `Você está pronto? Vamos junto! 🚀`
+    })
   }
 };
 
@@ -158,7 +150,9 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [userProfile, setUserProfile] = useState(null);
   
-  const [niche, setNiche] = useState('');
+  const [ideas, setIdeas] = useState([]);
+  const [selectedIdea, setSelectedIdea] = useState(null);
+  const [generatingIdeas, setGeneratingIdeas] = useState(false);
   const [scripts, setScripts] = useState([]);
   const [appLoading, setAppLoading] = useState(false);
   const [error, setError] = useState('');
@@ -245,6 +239,7 @@ export default function App() {
       loadHistory();
       loadCreditsUsed();
       loadAnalytics();
+      generateIdeas();
     }
   }, [user, isAdmin, userProfile]);
 
@@ -274,6 +269,83 @@ export default function App() {
     }
   };
 
+  const generateIdeas = async () => {
+    setGeneratingIdeas(true);
+    try {
+      const interests = userProfile?.interests || ['Marketing'];
+      const city = userProfile?.city || 'Brasil';
+      const age = userProfile?.age || 25;
+
+      const contextPrompt = `Gere 6 ideias de scripts virais para Reels baseado no perfil do usuário:
+- Interesses: ${interests.join(', ')}
+- Cidade: ${city}
+- Idade: ${age}
+
+Para cada ideia, retorne um JSON com:
+{
+  "id": número,
+  "titulo": "Título da ideia",
+  "emoji": "emoji relevante",
+  "descricao": "Descrição breve (max 100 caracteres)",
+  "contexto": "Contexto detalhado para gerar scripts",
+  "tema": "Tema principal (ex: tutorial, dica, tendência)",
+  "viralidade": "Alta | Média | Baixa",
+  "dificuldade": "Fácil | Médio | Difícil"
+}
+
+Retorne APENAS um array JSON válido, sem markdown, sem explicações.`;
+
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': 'sk-ant-d01_20250621_aec9b3d6f1f5c2e9a8b7c6d5e4f3a2b1c0' // NUNCA use API key real! Usar variável de ambiente
+        },
+        body: JSON.stringify({
+          model: 'claude-opus-4-6',
+          max_tokens: 1000,
+          messages: [
+            { role: 'user', content: contextPrompt }
+          ]
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Erro ao gerar ideias');
+      }
+
+      const data = await response.json();
+      const ideasText = data.content[0].text;
+      
+      const ideasArray = JSON.parse(ideasText);
+      setIdeas(ideasArray);
+      setSuccess('✨ Ideias atualizadas com sucesso!');
+    } catch (err) {
+      console.error('Erro ao gerar ideias:', err);
+      setError('Erro ao atualizar ideias. Tente novamente.');
+      // Fallback para ideias default
+      setIdeas(generateDefaultIdeas(userProfile?.interests || ['Marketing']));
+    } finally {
+      setGeneratingIdeas(false);
+    }
+  };
+
+  const generateDefaultIdeas = (interests) => {
+    const themes = ['tutorial', 'tendencia', 'dica', 'comparacao', 'antes_depois', 'resposta'];
+    const emojis = ['🎓', '🔥', '💡', '⚖️', '✨', '❓'];
+    
+    return interests.slice(0, 6).map((interest, idx) => ({
+      id: idx,
+      titulo: `${interest} ${themes[idx]}`,
+      emoji: emojis[idx],
+      descricao: `Ideia viral sobre ${interest}`,
+      contexto: `Gere scripts sobre os trends mais virais em ${interest} agora`,
+      tema: themes[idx],
+      viralidade: ['Alta', 'Alta', 'Média', 'Alta', 'Alta', 'Média'][idx],
+      dificuldade: ['Fácil', 'Médio', 'Fácil', 'Médio', 'Difícil', 'Fácil'][idx]
+    }));
+  };
+
   const saveProfile = async () => {
     setSettingsLoading(true);
     setSettingsMessage('');
@@ -293,6 +365,7 @@ export default function App() {
 
         if (error) throw error;
         setSettingsMessage('✅ Perfil atualizado com sucesso!');
+        await generateIdeas();
       } else {
         const { error } = await supabase
           .from('user_profiles')
@@ -310,6 +383,7 @@ export default function App() {
         if (error) throw error;
         await loadUserProfile(user.id);
         setSettingsMessage('✅ Perfil criado com sucesso!');
+        await generateIdeas();
       }
       setEditingProfile(false);
     } catch (err) {
@@ -482,7 +556,7 @@ export default function App() {
 
     const cleanTitle = scriptTitle.replace(/\s+/g, '').slice(0, 30);
     
-    const referenceURLs = [
+    return [
       {
         platform: 'instagram',
         url: `https://instagram.com/explore/tags/${cleanTitle}`,
@@ -499,8 +573,6 @@ export default function App() {
         emoji: '🎵'
       }
     ];
-
-    return referenceURLs;
   };
 
   const estimateVideoDuration = (script, userPlan) => {
@@ -514,11 +586,9 @@ export default function App() {
     return `${Math.min(3, estimatedSeconds)}-${Math.max(15, estimatedSeconds)} segundos`;
   };
 
-  const handleGenerateScripts = async () => {
-    if (!niche.trim()) {
-      setError('Por favor, digite um nicho');
-      return;
-    }
+  const handleGenerateScripts = async (ideiaId) => {
+    const ideia = ideas.find(i => i.id === ideiaId);
+    if (!ideia) return;
 
     if (!isAdmin) {
       const limit = PLAN_LIMITS[plan];
@@ -532,17 +602,19 @@ export default function App() {
     setAppLoading(true);
     setError('');
     setSuccess('');
+    setSelectedIdea(ideiaId);
 
     try {
-      const userContext = userProfile ? `Contexto do usuário: Interesse em ${userProfile.interests?.join(', ')} | Cidade: ${userProfile.city}` : '';
+      const userContext = userProfile ? `Contexto do usuário: ${ideia.descricao} | Interesses: ${userProfile.interests?.join(', ')} | Cidade: ${userProfile.city}` : ideia.contexto;
       
       const response = await fetch('https://reels-automation-pro.vercel.app/api/generate-scripts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           userData: { 
-            niche,
-            userContext
+            niche: ideia.titulo,
+            userContext,
+            tema: ideia.tema
           }
         })
       });
@@ -572,7 +644,7 @@ export default function App() {
               .insert([
                 {
                   user_id: user.id,
-                  niche: niche,
+                  niche: ideia.titulo,
                   titulo: script.titulo,
                   gancho: script.gancho,
                   desenvolvimento: script.desenvolvimento,
@@ -786,9 +858,6 @@ export default function App() {
   const creditLimit = PLAN_LIMITS[plan];
   const creditPercentage = isAdmin ? 100 : (creditsUsed / creditLimit) * 100;
   const creditsRemaining = isAdmin ? '∞' : Math.max(0, creditLimit - creditsUsed);
-  
-  const nicheKey = niche.toLowerCase().split(' ')[0];
-  const nicheInsights = INSIGHTS_TEMPLATES[nicheKey] || null;
 
   return (
     <div className={`${bg} ${text} min-h-screen transition-colors duration-300`}>
@@ -932,7 +1001,6 @@ export default function App() {
                       <button
                         key={i}
                         onClick={() => {
-                          setNiche(h.niche);
                           setShowMobileMenu(false);
                         }}
                         className={`w-full text-left p-3 rounded-lg transition transform hover:scale-105 ${
@@ -1008,99 +1076,110 @@ export default function App() {
 
             {currentPage === 'scripts' && (
               <>
-                <div className={`${card} rounded-3xl p-6 md:p-8 mb-8 border ${darkMode ? 'border-gray-700' : 'border-blue-200'} shadow-xl`}>
-                  <div className="mb-6">
-                    <h2 className="text-3xl md:text-4xl font-black mb-2 bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
-                      Scripts Virais com IA
-                    </h2>
-                    <p className={`text-sm md:text-base ${darkMode ? 'text-gray-400' : 'text-blue-600'}`}>
-                      Gere scripts profissionais em segundos {!isAdmin && creditsRemaining !== '∞' && `(${creditsRemaining} restantes)`}
-                    </p>
-                  </div>
-
-                  <div className="flex flex-col md:flex-row gap-3 mb-4">
-                    <input
-                      type="text"
-                      value={niche}
-                      onChange={(e) => setNiche(e.target.value)}
-                      placeholder="Ex: Marketing Digital, Personal Trainer, Beleza..."
-                      className={`flex-1 px-4 py-3 rounded-xl border ${input} focus:outline-none focus:ring-2 focus:ring-blue-500 transition`}
-                      onKeyPress={(e) => e.key === 'Enter' && handleGenerateScripts()}
-                    />
-                    <button
-                      onClick={handleGenerateScripts}
-                      disabled={appLoading || (!isAdmin && creditsRemaining === 0)}
-                      className="bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold py-3 px-6 rounded-xl hover:opacity-90 disabled:opacity-50 transition transform hover:scale-105 flex items-center justify-center gap-2 whitespace-nowrap shadow-lg"
-                    >
-                      {appLoading ? <Loader size={18} className="animate-spin" /> : '✨'}
-                      {appLoading ? 'Gerando...' : 'Começar'}
-                    </button>
-                  </div>
-
-                  {isAdmin && (
-                    <div className={`p-3 rounded-lg text-sm font-medium border ${
-                      darkMode
-                        ? 'bg-yellow-500 bg-opacity-20 border-yellow-500 text-yellow-300'
-                        : 'bg-yellow-50 border-yellow-200 text-yellow-700'
-                    }`}>
-                      ✨ Admin Master: Scripts ilimitados!
-                    </div>
-                  )}
-
-                  {!isAdmin && creditsRemaining === 0 && (
-                    <div className={`p-4 rounded-lg flex items-start gap-3 border ${
-                      darkMode
-                        ? 'bg-yellow-500 bg-opacity-20 border-yellow-500'
-                        : 'bg-yellow-50 border-yellow-200'
-                    }`}>
-                      <Zap className={`${darkMode ? 'text-yellow-400' : 'text-yellow-600'} flex-shrink-0 mt-1`} size={20} />
+                {!scripts.length && (
+                  <div>
+                    <div className="flex items-center justify-between mb-8">
                       <div>
-                        <p className={`font-bold text-sm mb-2 ${darkMode ? 'text-yellow-400' : 'text-yellow-700'}`}>
-                          Limite atingido!
+                        <h2 className="text-3xl md:text-4xl font-black mb-2 bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
+                          ✨ Ideias para seus Scripts
+                        </h2>
+                        <p className={`text-sm md:text-base ${darkMode ? 'text-gray-400' : 'text-blue-600'}`}>
+                          Selecionadas com base no seu perfil e as tendências mais virais
                         </p>
-                        <p className={`text-xs mb-3 ${darkMode ? 'text-yellow-300' : 'text-yellow-600'}`}>
-                          Você usou todos os {creditLimit} scripts do seu plano.
-                        </p>
-                        <button
-                          onClick={() => setShowUpgradeModal(true)}
-                          className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-gray-900 rounded-lg font-bold text-sm transition transform hover:scale-105"
-                        >
-                          ⬆️ Upgrade Agora
-                        </button>
                       </div>
+                      <button
+                        onClick={() => generateIdeas()}
+                        disabled={generatingIdeas}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold transition transform hover:scale-105"
+                      >
+                        {generatingIdeas ? <Loader size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+                        {generatingIdeas ? 'Atualizando...' : 'Atualizar'}
+                      </button>
                     </div>
-                  )}
-                </div>
 
-                {plan !== 'free' && nicheInsights && niche && !scripts.length && (
-                  <div className={`${card} rounded-3xl p-6 md:p-8 mb-8 border-l-4 border-green-500 border ${
-                    darkMode ? 'border-gray-700' : 'border-green-200'
-                  } shadow-lg bg-gradient-to-br ${darkMode ? 'from-green-500 from-opacity-5' : 'from-green-50'}`}>
-                    <div className="flex items-start gap-4">
-                      <div className="text-4xl flex-shrink-0">💡</div>
-                      <div className="flex-1">
-                        <h3 className={`text-2xl font-black mb-4 ${darkMode ? 'text-green-400' : 'text-green-700'}`}>
-                          {nicheInsights.title}
-                        </h3>
-                        <div className="space-y-3">
-                          {nicheInsights.insights.map((insight, idx) => (
-                            <div key={idx} className={`p-3 rounded-lg ${darkMode ? 'bg-gray-700 bg-opacity-50' : 'bg-white bg-opacity-50'}`}>
-                              <p className={`text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
-                                {insight}
-                              </p>
+                    {ideas.length > 0 ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+                        {ideas.map((ideia) => (
+                          <div
+                            key={ideia.id}
+                            className={`${card} rounded-2xl p-6 border-2 transition transform hover:scale-105 cursor-pointer ${
+                              selectedIdea === ideia.id
+                                ? 'border-blue-500 bg-blue-500 bg-opacity-10'
+                                : darkMode ? 'border-gray-700 hover:border-gray-600' : 'border-blue-200 hover:border-blue-300'
+                            }`}
+                          >
+                            <div className="text-5xl mb-4">{ideia.emoji}</div>
+                            <h3 className="text-xl font-bold mb-2">{ideia.titulo}</h3>
+                            <p className={`text-sm mb-4 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                              {ideia.descricao}
+                            </p>
+
+                            <div className="space-y-2 mb-4">
+                              <div className="flex items-center gap-2">
+                                <Sparkles size={14} className="text-yellow-500" />
+                                <span className={`text-xs font-semibold ${
+                                  ideia.viralidade === 'Alta' ? 'text-green-500' : ideia.viralidade === 'Média' ? 'text-yellow-500' : 'text-gray-500'
+                                }`}>
+                                  Viralidade: {ideia.viralidade}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Zap size={14} className="text-blue-500" />
+                                <span className={`text-xs font-semibold`}>
+                                  Dificuldade: {ideia.dificuldade}
+                                </span>
+                              </div>
                             </div>
-                          ))}
-                        </div>
-                        <p className={`text-xs mt-4 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                          ✨ Insights exclusivos para assinantes Premium e Top
+
+                            <button
+                              onClick={() => handleGenerateScripts(ideia.id)}
+                              disabled={appLoading}
+                              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:opacity-90 disabled:opacity-50 text-white font-bold py-2 px-4 rounded-lg transition transform hover:scale-105 flex items-center justify-center gap-2"
+                            >
+                              {appLoading && selectedIdea === ideia.id ? (
+                                <>
+                                  <Loader size={16} className="animate-spin" />
+                                  Gerando...
+                                </>
+                              ) : (
+                                <>
+                                  <Sparkles size={16} />
+                                  Gerar Scripts
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className={`${card} rounded-3xl p-12 text-center border-2 border-dashed ${
+                        darkMode ? 'border-gray-700' : 'border-blue-200'
+                      }`}>
+                        <Loader className="animate-spin text-blue-500 mx-auto mb-4" size={32} />
+                        <p className={`text-lg font-semibold ${darkMode ? 'text-gray-400' : 'text-blue-600'}`}>
+                          Gerando ideias baseadas em seu perfil...
                         </p>
                       </div>
-                    </div>
+                    )}
                   </div>
                 )}
 
                 {scripts.length > 0 && (
                   <div>
+                    <button
+                      onClick={() => {
+                        setScripts([]);
+                        setSelectedIdea(null);
+                      }}
+                      className={`mb-6 flex items-center gap-2 px-4 py-2 rounded-lg font-bold transition transform hover:scale-105 ${
+                        darkMode
+                          ? 'bg-gray-700 hover:bg-gray-600 text-white'
+                          : 'bg-blue-100 hover:bg-blue-200 text-blue-900'
+                      }`}
+                    >
+                      <ChevronLeft size={18} /> Voltar às ideias
+                    </button>
+
                     <h2 className="text-2xl font-black mb-6">📝 {scripts.length} Scripts Gerados</h2>
                     <div className="space-y-6">
                       {scripts.map((s, i) => (
@@ -1187,7 +1266,7 @@ export default function App() {
                               <p className={`text-xs font-bold uppercase mb-2 flex items-center gap-1 ${
                                 darkMode ? 'text-purple-400' : 'text-purple-600'
                               }`}>
-                                <Tag size={14} /> Hashtags {plan !== 'free' && '(Alto Engajamento)'}
+                                <Tag size={14} /> Hashtags
                               </p>
                               <div className="flex gap-2 flex-wrap">
                                 {s.hashtags.map((tag, idx) => (
@@ -1204,13 +1283,10 @@ export default function App() {
                                   </button>
                                 ))}
                               </div>
-                              {copied && copied.includes('hashtag') && (
-                                <p className="text-xs text-green-500 mt-2">✓ Copiado!</p>
-                              )}
                             </div>
                           )}
 
-                          {plan !== 'free' && s.reference_urls && s.reference_urls.length > 0 ? (
+                          {plan !== 'free' && s.reference_urls && s.reference_urls.length > 0 && (
                             <div className={`mb-4 p-4 rounded-lg border ${
                               darkMode
                                 ? 'bg-cyan-500 bg-opacity-10 border-cyan-500 border-opacity-30'
@@ -1233,7 +1309,7 @@ export default function App() {
                                 ))}
                               </div>
                             </div>
-                          ) : null}
+                          )}
 
                           <div className="flex flex-col md:flex-row gap-3 pt-4 border-t border-gray-700">
                             <button
@@ -1256,43 +1332,6 @@ export default function App() {
                         </div>
                       ))}
                     </div>
-                  </div>
-                )}
-
-                {!scripts.length && !appLoading && (
-                  <div className={`${card} rounded-3xl p-12 text-center border-2 border-dashed ${
-                    darkMode ? 'border-gray-700' : 'border-blue-200'
-                  }`}>
-                    <p className="text-5xl mb-4">🎯</p>
-                    <p className={`text-lg font-semibold ${darkMode ? 'text-gray-400' : 'text-blue-600'}`}>
-                      Digite um nicho para começar
-                    </p>
-                    <p className={`text-sm mt-2 ${darkMode ? 'text-gray-500' : 'text-blue-500'}`}>
-                      Crie scripts virais incríveis em segundos!
-                    </p>
-
-                    {history.length > 0 && (
-                      <div className="mt-8 pt-8 border-t border-gray-600">
-                        <p className={`text-xs uppercase font-bold mb-4 ${darkMode ? 'text-gray-400' : 'text-blue-600'}`}>
-                          📌 Buscar do histórico
-                        </p>
-                        <div className="flex gap-2 flex-wrap justify-center">
-                          {history.map((h, i) => (
-                            <button
-                              key={i}
-                              onClick={() => setNiche(h.niche)}
-                              className={`px-4 py-2 rounded-lg text-sm font-bold transition transform hover:scale-105 ${
-                                darkMode
-                                  ? 'bg-gray-700 hover:bg-gray-600'
-                                  : 'bg-blue-100 hover:bg-blue-200 text-blue-900'
-                              }`}
-                            >
-                              {h.niche}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
                   </div>
                 )}
               </>
