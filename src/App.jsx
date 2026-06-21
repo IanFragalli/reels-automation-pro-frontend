@@ -4,6 +4,7 @@ import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Cart
 import { supabase } from './supabaseClient';
 import Auth from './Auth';
 import Pricing from './Pricing';
+import Admin from './Admin';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -59,6 +60,9 @@ export default function App() {
   };
 
   const COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4', '#6366f1'];
+
+  // Admin check - simples verificação de email
+  const isAdmin = user?.email === 'ianfragalli@hotmail.com';
 
   useEffect(() => {
     supabase.auth.onAuthStateChange((event, session) => {
@@ -397,6 +401,7 @@ export default function App() {
     setUser(null);
     setScripts([]);
     setHistory([]);
+    setCurrentPage('scripts');
   };
 
   const bg = darkMode ? 'bg-gray-900' : 'bg-white';
@@ -421,6 +426,10 @@ export default function App() {
     return <Auth onAuthSuccess={() => setUser(true)} />;
   }
 
+  if (isAdmin && currentPage === 'admin') {
+    return <Admin user={user} darkMode={darkMode} onLogout={handleLogout} />;
+  }
+
   const scriptLimit = PLAN_LIMITS[plan];
   const scriptPercentage = (scriptsUsed / scriptLimit) * 100;
   const scriptsRemaining = Math.max(0, scriptLimit - scriptsUsed);
@@ -437,6 +446,14 @@ export default function App() {
                 {plan === 'free' ? '🟢' : plan === 'pro' ? '🔵' : '🟣'} {PLAN_NAMES[plan].toUpperCase()}
               </p>
             </div>
+            {isAdmin && (
+              <button
+                onClick={() => setCurrentPage('admin')}
+                className="px-4 py-2 text-sm font-bold bg-purple-700 hover:bg-purple-600 rounded-lg transition"
+              >
+                👑 Admin
+              </button>
+            )}
             <button
               onClick={() => setCurrentPage('pricing')}
               className="px-4 py-2 text-sm font-bold bg-gray-700 hover:bg-gray-600 rounded-lg transition"
