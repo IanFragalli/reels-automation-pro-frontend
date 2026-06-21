@@ -13,12 +13,11 @@ export default function App() {
 
     try {
       // Chamada ao backend
-      const response = await fetch('/api/generate-scripts', {
+      const response = await fetch('https://reels-automation-pro.vercel.app/api/generate-scripts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: 'demo-user',
-          userData: userData
+          userData: { niche: scriptNiche }
         })
       });
 
