@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Copy, Download, Share2, Heart } from 'lucide-react';
+import { Copy, Download, Share2, Heart, Zap, Lock, Crown } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import Auth from './Auth';
 
@@ -14,6 +14,27 @@ export default function App() {
   const [favorites, setFavorites] = useState([]);
   const [darkMode, setDarkMode] = useState(true);
   const [copied, setCopied] = useState(null);
+  const [plan, setPlan] = useState('free');
+  const [scriptsUsed, setScriptsUsed] = useState(0);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+
+  const PLAN_LIMITS = {
+    free: 5,
+    pro: 50,
+    business: 999999
+  };
+
+  const PLAN_NAMES = {
+    free: 'Free',
+    pro: 'Pro',
+    business: 'Business'
+  };
+
+  const PLAN_COLORS = {
+    free: 'from-gray-500 to-gray-600',
+    pro: 'from-blue-500 to-blue-600',
+    business: 'from-purple-500 to-purple-600'
+  };
 
   useEffect(() => {
     supabase.auth.onAuthStateChange((event, session) => {
@@ -24,23 +45,43 @@ export default function App() {
 
   useEffect(() => {
     if (user) {
+      loadUserPlan();
       loadHistory();
+      loadScriptsUsed();
     }
   }, [user]);
 
+  const loadUserPlan = async () => {
+    const { data } = await supabase
+      .from('user_subscriptions')
+      .select('plan, scripts_used')
+      .eq('user_id', user.id)
+      .single();
+
+    if (data) {
+      setPlan(data.plan || 'free');
+      setScriptsUsed(data.scripts_used || 0);
+    } else {
+      // Criar subscrição padrão se não existir
+      await supabase.from('user_subscriptions').insert({
+        user_id: user.id,
+        plan: 'free',
+        scripts_limit: 5,
+        scripts_used: 0
+      });
+      setPlan('free');
+      setScriptsUsed(0);
+    }
+  };
+
   const loadHistory = async () => {
     try {
-      const { data, error: err } = await supabase
+      const { data } = await supabase
         .from('scripts')
         .select('niche, created_at')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(10);
-
-      if (err) {
-        console.error('Erro ao carregar histórico:', err);
-        return;
-      }
 
       if (data && data.length > 0) {
         const seen = new Set();
@@ -57,13 +98,30 @@ export default function App() {
         setHistory(unique);
       }
     } catch (err) {
-      console.error('Erro geral ao carregar histórico:', err);
+      console.error('Erro ao carregar histórico:', err);
     }
+  };
+
+  const loadScriptsUsed = async () => {
+    const { count } = await supabase
+      .from('scripts')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id);
+
+    setScriptsUsed(count || 0);
   };
 
   const handleGenerate = async () => {
     if (!niche.trim()) {
       setError('Digite um nicho');
+      return;
+    }
+
+    // Verificar limite
+    const limit = PLAN_LIMITS[plan];
+    if (scriptsUsed >= limit) {
+      setShowUpgradeModal(true);
+      setError(`Limite atingido! Você tem ${limit} scripts/mês`);
       return;
     }
 
@@ -83,11 +141,11 @@ export default function App() {
         setScripts(data.scripts);
 
         if (user) {
-          console.log('User ID:', user.id);
-          console.log('Salvando', data.scripts.length, 'scripts');
-
+          let inserted = 0;
           for (const script of data.scripts) {
-            const { data: insertedData, error: insertError } = await supabase
+            if (scriptsUsed + inserted >= limit) break;
+
+            const { error: insertError } = await supabase
               .from('scripts')
               .insert([
                 {
@@ -103,15 +161,23 @@ export default function App() {
                 }
               ]);
 
-            if (insertError) {
-              console.error('Erro ao inserir script:', insertError);
-            } else {
-              console.log('Script inserido com sucesso');
+            if (!insertError) {
+              inserted++;
             }
           }
 
-          console.log('Recarregando histórico...');
+          // Atualizar contador
+          await supabase
+            .from('user_subscriptions')
+            .update({ scripts_used: scriptsUsed + inserted })
+            .eq('user_id', user.id);
+
+          setScriptsUsed(prev => prev + inserted);
           await loadHistory();
+
+          if (inserted < data.scripts.length) {
+            setError(`Limite atingido! ${inserted} de ${data.scripts.length} scripts gerados.`);
+          }
         }
       } else {
         setError('Nenhum script gerado');
@@ -131,6 +197,12 @@ export default function App() {
   };
 
   const downloadScript = (script) => {
+    if (plan === 'free') {
+      setShowUpgradeModal(true);
+      setError('Download disponível apenas em planos pagos');
+      return;
+    }
+
     const text = `SCRIPT: ${script.titulo}\n\nGANCHO:\n${script.gancho}\n\nDESENVOLVIMENTO:\n${script.desenvolvimento}\n\nCTA:\n${script.cta}\n\nDURAÇÃO: ${script.duracao}\nDIFICULDADE: ${script.dificuldade}`;
     const blob = new Blob([text], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
@@ -148,7 +220,7 @@ export default function App() {
   const toggleFavorite = async (scriptTitle) => {
     if (!user) return;
     const isFav = favorites.includes(scriptTitle);
-    
+
     await supabase
       .from('scripts')
       .update({ is_favorite: !isFav })
@@ -186,6 +258,10 @@ export default function App() {
     return <Auth onAuthSuccess={() => setUser(true)} />;
   }
 
+  const scriptLimit = PLAN_LIMITS[plan];
+  const scriptPercentage = (scriptsUsed / scriptLimit) * 100;
+  const scriptsRemaining = Math.max(0, scriptLimit - scriptsUsed);
+
   return (
     <div className={`${bg} ${text} min-h-screen transition-colors`}>
       {/* HEADER */}
@@ -193,6 +269,11 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <h1 className="text-2xl font-bold">🎬 Reels AI Pro</h1>
           <div className="flex items-center gap-4">
+            <div className={`px-4 py-2 rounded-lg bg-gradient-to-r ${PLAN_COLORS[plan]}`}>
+              <p className="text-sm font-bold">
+                {plan === 'free' ? '🟢' : plan === 'pro' ? '🔵' : '🟣'} {PLAN_NAMES[plan].toUpperCase()}
+              </p>
+            </div>
             <button
               onClick={() => setDarkMode(!darkMode)}
               className="p-2 rounded-lg bg-gray-700 hover:bg-gray-600"
@@ -211,9 +292,86 @@ export default function App() {
 
       <div className="flex min-h-screen">
         {/* SIDEBAR */}
-        <aside className={`${card} border-r border-gray-700 w-64 p-6 hidden lg:block overflow-y-auto`}>
-          <div>
-            <h3 className="font-bold text-gray-400 text-sm uppercase mb-4">📋 Histórico</h3>
+        <aside className={`${card} border-r border-gray-700 w-80 p-6 hidden lg:block overflow-y-auto`}>
+          {/* PLANO CARD */}
+          <div className={`bg-gradient-to-br ${PLAN_COLORS[plan]} rounded-xl p-6 mb-6 text-white`}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-2xl font-bold">
+                {plan === 'free' ? '🟢' : plan === 'pro' ? '🔵' : '🟣'} {PLAN_NAMES[plan]}
+              </h3>
+              {plan !== 'business' && (
+                <button
+                  onClick={() => setShowUpgradeModal(true)}
+                  className="px-3 py-1 bg-white text-gray-900 rounded font-bold text-sm hover:bg-gray-100 transition"
+                >
+                  Upgrade
+                </button>
+              )}
+            </div>
+
+            {/* USAGE CARD */}
+            <div className="bg-white bg-opacity-20 rounded-lg p-4 mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-semibold">Scripts Usados</p>
+                <p className="text-sm font-bold">
+                  {scriptsUsed} / {scriptLimit === 999999 ? '∞' : scriptLimit}
+                </p>
+              </div>
+              <div className="w-full bg-white bg-opacity-20 rounded-full h-2 overflow-hidden">
+                <div
+                  className="bg-white h-full transition-all duration-300"
+                  style={{ width: `${Math.min(scriptPercentage, 100)}%` }}
+                />
+              </div>
+              <p className="text-xs mt-2 opacity-90">
+                {scriptsRemaining} scripts restantes
+              </p>
+            </div>
+
+            {plan === 'free' && (
+              <div className="text-xs opacity-90 flex items-center gap-2">
+                <Lock size={14} /> Reset mensal: 1º de cada mês
+              </div>
+            )}
+          </div>
+
+          {/* FEATURES */}
+          <div className="mb-6">
+            <h4 className="font-bold text-gray-400 text-sm uppercase mb-3">Recursos</h4>
+            <div className="space-y-2 text-sm">
+              <div className="flex items-center gap-2">
+                <span className="text-green-400">✓</span> Gerar scripts
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={plan !== 'free' ? 'text-green-400' : 'text-gray-500'}>
+                  {plan !== 'free' ? '✓' : '✗'}
+                </span>
+                <span className={plan !== 'free' ? '' : 'line-through opacity-50'}>
+                  Download PDF
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={plan !== 'free' ? 'text-green-400' : 'text-gray-500'}>
+                  {plan !== 'free' ? '✓' : '✗'}
+                </span>
+                <span className={plan !== 'free' ? '' : 'line-through opacity-50'}>
+                  Analytics básico
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={plan === 'business' ? 'text-green-400' : 'text-gray-500'}>
+                  {plan === 'business' ? '✓' : '✗'}
+                </span>
+                <span className={plan === 'business' ? '' : 'line-through opacity-50'}>
+                  Agendamento automático
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* HISTÓRICO */}
+          <div className="mb-6">
+            <h4 className="font-bold text-gray-400 text-sm uppercase mb-3">Histórico</h4>
             {history.length === 0 ? (
               <p className="text-gray-500 text-sm">Nenhuma busca ainda</p>
             ) : (
@@ -234,24 +392,32 @@ export default function App() {
             )}
           </div>
 
-          <div className="mt-8 pt-8 border-t border-gray-700">
-            <h3 className="font-bold text-gray-400 text-sm uppercase mb-4">❤️ Favoritos</h3>
+          {/* FAVORITOS */}
+          <div className="mb-6">
+            <h4 className="font-bold text-gray-400 text-sm uppercase mb-3">❤️ Favoritos</h4>
             <p className="text-gray-500 text-sm">{favorites.length} script(s) salvo(s)</p>
           </div>
 
-          <div className="mt-8 pt-8 border-t border-gray-700">
-            <div className={`p-4 rounded-lg ${
-              darkMode
-                ? 'bg-gradient-to-br from-blue-900 to-purple-900'
-                : 'bg-gradient-to-br from-blue-100 to-purple-100'
-            }`}>
-              <h4 className="font-bold mb-2">⭐ Pro</h4>
-              <p className="text-xs text-gray-300 mb-3">Ilimitado + Download + Templates</p>
-              <button className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold py-2 px-3 rounded text-sm hover:opacity-90 transition">
-                Assinar
+          {/* UPGRADE BOX */}
+          {plan !== 'business' && (
+            <div
+              className={`bg-gradient-to-br from-purple-900 to-purple-800 rounded-xl p-4 border border-purple-700`}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <Crown size={18} className="text-yellow-400" />
+                <h4 className="font-bold">Plano Business</h4>
+              </div>
+              <p className="text-xs text-gray-300 mb-3">
+                Scripts ilimitados + agendamento automático + API
+              </p>
+              <button
+                onClick={() => setShowUpgradeModal(true)}
+                className="w-full bg-gradient-to-r from-yellow-500 to-yellow-600 text-gray-900 font-bold py-2 px-3 rounded-lg hover:opacity-90 transition text-sm"
+              >
+                Assinar Agora
               </button>
             </div>
-          </div>
+          )}
         </aside>
 
         {/* MAIN */}
@@ -260,7 +426,9 @@ export default function App() {
             {/* SEARCH */}
             <div className={`${card} rounded-xl p-8 mb-8 border border-gray-700 shadow-lg`}>
               <h2 className="text-3xl font-bold mb-2">Scripts Virais com IA</h2>
-              <p className="text-gray-400 mb-6">Gere 5 scripts prontos para gravar em segundos</p>
+              <p className="text-gray-400 mb-6">
+                Gere scripts profissionais em segundos {scriptsRemaining > 0 && `(${scriptsRemaining} restantes)`}
+              </p>
 
               <div className="flex gap-3">
                 <input
@@ -273,14 +441,37 @@ export default function App() {
                 />
                 <button
                   onClick={handleGenerate}
-                  disabled={appLoading}
-                  className="bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold py-3 px-6 rounded-lg hover:opacity-90 disabled:opacity-50 transition whitespace-nowrap"
+                  disabled={appLoading || scriptsRemaining === 0}
+                  className="bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold py-3 px-6 rounded-lg hover:opacity-90 disabled:opacity-50 transition whitespace-nowrap flex items-center gap-2"
                 >
+                  {scriptsRemaining === 0 && <Lock size={18} />}
                   {appLoading ? '⏳ Gerando...' : '✨ Gerar'}
                 </button>
               </div>
 
-              {error && <p className="text-red-500 mt-4 text-sm">{error}</p>}
+              {error && (
+                <div className="mt-4 p-3 bg-red-500 bg-opacity-20 border border-red-500 rounded-lg">
+                  <p className="text-red-400 text-sm">{error}</p>
+                </div>
+              )}
+
+              {scriptsRemaining === 0 && (
+                <div className="mt-4 p-4 bg-yellow-500 bg-opacity-20 border border-yellow-500 rounded-lg flex items-start gap-3">
+                  <Zap className="text-yellow-400 flex-shrink-0 mt-1" size={18} />
+                  <div>
+                    <p className="text-yellow-400 font-bold text-sm">Limite atingido!</p>
+                    <p className="text-yellow-300 text-xs mt-1">
+                      Você usou todos os {scriptLimit} scripts do seu plano. Upgrade para continuar gerando.
+                    </p>
+                    <button
+                      onClick={() => setShowUpgradeModal(true)}
+                      className="mt-2 px-3 py-1 bg-yellow-500 text-gray-900 rounded font-bold text-xs hover:bg-yellow-600 transition"
+                    >
+                      Upgrade Agora
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* SCRIPTS */}
@@ -360,8 +551,10 @@ export default function App() {
                       <div className="flex gap-3 pt-4 border-t border-gray-700">
                         <button
                           onClick={() => downloadScript(s)}
-                          className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 transition text-sm font-medium"
+                          disabled={plan === 'free'}
+                          className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition text-sm font-medium"
                         >
+                          {plan === 'free' && <Lock size={16} />}
                           <Download size={18} /> Baixar
                         </button>
                         <button
@@ -385,6 +578,94 @@ export default function App() {
           </div>
         </main>
       </div>
+
+      {/* UPGRADE MODAL */}
+      {showUpgradeModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className={`${card} rounded-2xl p-8 max-w-2xl w-full border border-gray-700`}>
+            <h2 className="text-3xl font-bold mb-6 flex items-center gap-2">
+              <Crown size={28} className="text-yellow-400" /> Escolha seu Plano
+            </h2>
+
+            <div className="grid grid-cols-3 gap-4 mb-8">
+              {/* FREE */}
+              <div
+                className={`rounded-lg p-6 border-2 transition cursor-pointer ${
+                  plan === 'free'
+                    ? 'border-blue-500 bg-blue-500 bg-opacity-10'
+                    : 'border-gray-700 hover:border-gray-600'
+                }`}
+              >
+                <h3 className="text-xl font-bold mb-2">🟢 Free</h3>
+                <p className="text-2xl font-bold mb-4">R$ 0</p>
+                <div className="space-y-2 text-sm mb-4">
+                  <p>✓ 5 scripts/mês</p>
+                  <p>✓ Histórico</p>
+                  <p>✗ Download</p>
+                </div>
+                {plan === 'free' && <p className="text-blue-400 text-sm font-bold">Seu plano atual</p>}
+              </div>
+
+              {/* PRO */}
+              <div
+                className={`rounded-lg p-6 border-2 transition cursor-pointer ${
+                  plan === 'pro'
+                    ? 'border-blue-500 bg-blue-500 bg-opacity-10'
+                    : 'border-gray-700 hover:border-gray-600'
+                }`}
+              >
+                <h3 className="text-xl font-bold mb-2">🔵 Pro</h3>
+                <p className="text-2xl font-bold mb-4">
+                  R$ 39<span className="text-sm">/mês</span>
+                </p>
+                <div className="space-y-2 text-sm mb-4">
+                  <p>✓ 50 scripts/mês</p>
+                  <p>✓ Download PDF</p>
+                  <p>✓ Analytics</p>
+                </div>
+                {plan === 'pro' && <p className="text-blue-400 text-sm font-bold">Seu plano atual</p>}
+                {plan !== 'pro' && (
+                  <button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-3 rounded-lg transition text-sm">
+                    Upgrade
+                  </button>
+                )}
+              </div>
+
+              {/* BUSINESS */}
+              <div
+                className={`rounded-lg p-6 border-2 transition cursor-pointer ${
+                  plan === 'business'
+                    ? 'border-purple-500 bg-purple-500 bg-opacity-10'
+                    : 'border-gray-700 hover:border-gray-600'
+                }`}
+              >
+                <h3 className="text-xl font-bold mb-2">🟣 Business</h3>
+                <p className="text-2xl font-bold mb-4">
+                  R$ 149<span className="text-sm">/mês</span>
+                </p>
+                <div className="space-y-2 text-sm mb-4">
+                  <p>✓ Scripts ilimitados</p>
+                  <p>✓ Agendamento automático</p>
+                  <p>✓ API access</p>
+                </div>
+                {plan === 'business' && <p className="text-purple-400 text-sm font-bold">Seu plano atual</p>}
+                {plan !== 'business' && (
+                  <button className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-3 rounded-lg transition text-sm">
+                    Upgrade
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowUpgradeModal(false)}
+              className="w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-4 rounded-lg transition"
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
