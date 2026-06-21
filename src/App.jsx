@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Copy, Download, Share2, Heart } from 'lucide-react';
+import { supabase } from './supabaseClient';
+import Auth from './Auth';
 
 export default function App() {
+  const [user, setUser] = useState(null);
   const [niche, setNiche] = useState('');
   const [scripts, setScripts] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [history, setHistory] = useState([]);
   const [favorites, setFavorites] = useState([]);
@@ -77,6 +80,21 @@ export default function App() {
   const text = darkMode ? 'text-white' : 'text-gray-900';
   const card = darkMode ? 'bg-gray-800' : 'bg-gray-50';
   const input = darkMode ? 'bg-gray-700 text-white' : 'bg-white text-gray-900 border-gray-300';
+
+  useEffect(() => {
+    supabase.auth.onAuthStateChange((event, session) => {
+      setUser(session?.user || null);
+      setLoading(false);
+    });
+  }, []);
+
+  if (loading) {
+    return <div className="bg-gray-900 text-white min-h-screen flex items-center justify-center">Carregando...</div>;
+  }
+
+  if (!user) {
+    return <Auth onAuthSuccess={() => setUser(true)} />;
+  }
 
   return (
     <div className={`${bg} ${text} min-h-screen transition-colors`}>
