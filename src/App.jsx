@@ -81,12 +81,18 @@ export default function App() {
 
   useEffect(() => {
     if (user) {
-      loadUserPlan();
+      if (isAdmin) {
+        // Admin tem acesso ilimitado
+        setPlan('business');
+        setScriptsUsed(0);
+      } else {
+        loadUserPlan();
+      }
       loadHistory();
       loadScriptsUsed();
       loadAnalytics();
     }
-  }, [user]);
+  }, [user, isAdmin]);
 
   const loadUserPlan = async () => {
     const { data } = await supabase
@@ -207,11 +213,14 @@ export default function App() {
       return;
     }
 
-    const limit = PLAN_LIMITS[plan];
-    if (scriptsUsed >= limit) {
-      setShowUpgradeModal(true);
-      setError(`Limite atingido! Você tem ${limit} scripts/mês`);
-      return;
+    // Admin pode gerar ilimitado
+    if (!isAdmin) {
+      const limit = PLAN_LIMITS[plan];
+      if (scriptsUsed >= limit) {
+        setShowUpgradeModal(true);
+        setError(`Limite atingido! Você tem ${limit} scripts/mês`);
+        return;
+      }
     }
 
     setAppLoading(true);
@@ -231,6 +240,8 @@ export default function App() {
 
         if (user) {
           let inserted = 0;
+          const limit = isAdmin ? 999999 : PLAN_LIMITS[plan];
+          
           for (const script of data.scripts) {
             if (scriptsUsed + inserted >= limit) break;
 
@@ -255,10 +266,12 @@ export default function App() {
             }
           }
 
-          await supabase
-            .from('user_subscriptions')
-            .update({ scripts_used: scriptsUsed + inserted })
-            .eq('user_id', user.id);
+          if (!isAdmin) {
+            await supabase
+              .from('user_subscriptions')
+              .update({ scripts_used: scriptsUsed + inserted })
+              .eq('user_id', user.id);
+          }
 
           setScriptsUsed(prev => prev + inserted);
           await loadHistory();
@@ -357,7 +370,7 @@ export default function App() {
   };
 
   const downloadScript = (script) => {
-    if (plan === 'free') {
+    if (!isAdmin && plan === 'free') {
       setShowUpgradeModal(true);
       setError('Download disponível apenas em planos pagos');
       return;
@@ -431,8 +444,8 @@ export default function App() {
   }
 
   const scriptLimit = PLAN_LIMITS[plan];
-  const scriptPercentage = (scriptsUsed / scriptLimit) * 100;
-  const scriptsRemaining = Math.max(0, scriptLimit - scriptsUsed);
+  const scriptPercentage = isAdmin ? 100 : (scriptsUsed / scriptLimit) * 100;
+  const scriptsRemaining = isAdmin ? '∞' : Math.max(0, scriptLimit - scriptsUsed);
 
   return (
     <div className={`${bg} ${text} min-h-screen transition-colors`}>
@@ -441,9 +454,9 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <h1 className="text-2xl font-bold">🎬 Reels AI Pro</h1>
           <div className="flex items-center gap-4">
-            <div className={`px-4 py-2 rounded-lg bg-gradient-to-r ${PLAN_COLORS[plan]}`}>
+            <div className={`px-4 py-2 rounded-lg bg-gradient-to-r ${isAdmin ? 'from-yellow-500 to-yellow-600' : PLAN_COLORS[plan]}`}>
               <p className="text-sm font-bold">
-                {plan === 'free' ? '🟢' : plan === 'pro' ? '🔵' : '🟣'} {PLAN_NAMES[plan].toUpperCase()}
+                {isAdmin ? '👑 ADMIN MASTER' : plan === 'free' ? '🟢 FREE' : plan === 'pro' ? '🔵 PRO' : '🟣 BUSINESS'}
               </p>
             </div>
             {isAdmin && (
@@ -514,12 +527,12 @@ export default function App() {
           </div>
 
           {/* PLANO CARD */}
-          <div className={`bg-gradient-to-br ${PLAN_COLORS[plan]} rounded-xl p-6 mb-6 text-white`}>
+          <div className={`bg-gradient-to-br ${isAdmin ? 'from-yellow-500 to-yellow-600' : PLAN_COLORS[plan]} rounded-xl p-6 mb-6 text-white`}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-2xl font-bold">
-                {plan === 'free' ? '🟢' : plan === 'pro' ? '🔵' : '🟣'} {PLAN_NAMES[plan]}
+                {isAdmin ? '👑 ADMIN' : plan === 'free' ? '🟢' : plan === 'pro' ? '🔵' : '🟣'} {isAdmin ? 'MASTER' : PLAN_NAMES[plan]}
               </h3>
-              {plan !== 'business' && (
+              {!isAdmin && plan !== 'business' && (
                 <button
                   onClick={() => setShowUpgradeModal(true)}
                   className="px-3 py-1 bg-white text-gray-900 rounded font-bold text-sm hover:bg-gray-100 transition"
@@ -533,7 +546,7 @@ export default function App() {
               <div className="flex items-center justify-between mb-2">
                 <p className="text-sm font-semibold">Scripts Usados</p>
                 <p className="text-sm font-bold">
-                  {scriptsUsed} / {scriptLimit === 999999 ? '∞' : scriptLimit}
+                  {isAdmin ? '∞' : scriptsUsed} / {isAdmin ? '∞' : scriptLimit === 999999 ? '∞' : scriptLimit}
                 </p>
               </div>
               <div className="w-full bg-white bg-opacity-20 rounded-full h-2 overflow-hidden">
@@ -543,7 +556,7 @@ export default function App() {
                 />
               </div>
               <p className="text-xs mt-2 opacity-90">
-                {scriptsRemaining} scripts restantes
+                {isAdmin ? '∞ scripts ilimitado' : `${scriptsRemaining} scripts restantes`}
               </p>
             </div>
           </div>
@@ -596,7 +609,7 @@ export default function App() {
             </div>
           )}
 
-          {plan !== 'business' && (
+          {!isAdmin && plan !== 'business' && (
             <div className={`bg-gradient-to-br from-purple-900 to-purple-800 rounded-xl p-4 border border-purple-700`}>
               <div className="flex items-center gap-2 mb-2">
                 <Crown size={18} className="text-yellow-400" />
@@ -627,7 +640,7 @@ export default function App() {
                 <div className={`${card} rounded-xl p-8 mb-8 border border-gray-700 shadow-lg`}>
                   <h2 className="text-3xl font-bold mb-2">Scripts Virais com IA</h2>
                   <p className="text-gray-400 mb-6">
-                    Gere scripts profissionais em segundos {scriptsRemaining > 0 && `(${scriptsRemaining} restantes)`}
+                    Gere scripts profissionais em segundos {!isAdmin && scriptsRemaining !== '∞' && `(${scriptsRemaining} restantes)`}
                   </p>
 
                   <div className="flex gap-3">
@@ -641,10 +654,10 @@ export default function App() {
                     />
                     <button
                       onClick={handleGenerateScripts}
-                      disabled={appLoading || scriptsRemaining === 0}
+                      disabled={appLoading || (!isAdmin && scriptsRemaining === 0)}
                       className="bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold py-3 px-6 rounded-lg hover:opacity-90 disabled:opacity-50 transition whitespace-nowrap flex items-center gap-2"
                     >
-                      {scriptsRemaining === 0 && <Lock size={18} />}
+                      {!isAdmin && scriptsRemaining === 0 && <Lock size={18} />}
                       {appLoading ? '⏳ Gerando...' : '✨ Gerar'}
                     </button>
                   </div>
@@ -655,7 +668,7 @@ export default function App() {
                     </div>
                   )}
 
-                  {scriptsRemaining === 0 && (
+                  {!isAdmin && scriptsRemaining === 0 && (
                     <div className="mt-4 p-4 bg-yellow-500 bg-opacity-20 border border-yellow-500 rounded-lg flex items-start gap-3">
                       <Zap className="text-yellow-400 flex-shrink-0 mt-1" size={18} />
                       <div>
@@ -670,6 +683,12 @@ export default function App() {
                           Upgrade Agora
                         </button>
                       </div>
+                    </div>
+                  )}
+
+                  {isAdmin && (
+                    <div className="mt-4 p-4 bg-yellow-500 bg-opacity-20 border border-yellow-500 rounded-lg">
+                      <p className="text-yellow-300 text-sm">✨ Admin Master: Scripts ilimitados!</p>
                     </div>
                   )}
                 </div>
@@ -750,10 +769,8 @@ export default function App() {
                           <div className="flex gap-3 pt-4 border-t border-gray-700">
                             <button
                               onClick={() => downloadScript(s)}
-                              disabled={plan === 'free'}
-                              className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition text-sm font-medium"
+                              className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 transition text-sm font-medium"
                             >
-                              {plan === 'free' && <Lock size={16} />}
                               <Download size={18} /> Baixar
                             </button>
                             <button
@@ -970,12 +987,12 @@ export default function App() {
 
                     <div className="mb-6">
                       <p className="text-gray-400 mb-2">Você está no plano:</p>
-                      <p className={`text-3xl font-bold bg-gradient-to-r ${PLAN_COLORS[plan]} bg-clip-text text-transparent`}>
-                        {PLAN_NAMES[plan]} {plan === 'free' ? '(Gratuito)' : ''}
+                      <p className={`text-3xl font-bold bg-gradient-to-r ${isAdmin ? 'from-yellow-500 to-yellow-600' : PLAN_COLORS[plan]} bg-clip-text text-transparent`}>
+                        {isAdmin ? '👑 ADMIN MASTER' : PLAN_NAMES[plan]} {!isAdmin && plan === 'free' ? '(Gratuito)' : ''}
                       </p>
                     </div>
 
-                    {plan !== 'business' && (
+                    {!isAdmin && plan !== 'business' && (
                       <button
                         onClick={() => setShowUpgradeModal(true)}
                         className="bg-gradient-to-r from-yellow-500 to-yellow-600 text-gray-900 font-bold py-2 px-6 rounded-lg hover:opacity-90 transition flex items-center gap-2"
@@ -986,21 +1003,23 @@ export default function App() {
                   </div>
 
                   {/* DELETAR CONTA */}
-                  <div className={`${card} rounded-xl p-8 border border-red-700 bg-red-500 bg-opacity-5`}>
-                    <h3 className="text-2xl font-bold mb-4 flex items-center gap-2 text-red-500">
-                      <AlertCircle size={24} /> Zona de Perigo
-                    </h3>
+                  {!isAdmin && (
+                    <div className={`${card} rounded-xl p-8 border border-red-700 bg-red-500 bg-opacity-5`}>
+                      <h3 className="text-2xl font-bold mb-4 flex items-center gap-2 text-red-500">
+                        <AlertCircle size={24} /> Zona de Perigo
+                      </h3>
 
-                    <p className="text-gray-400 mb-6">Deletar sua conta é uma ação irreversível. Todos os seus dados serão removidos permanentemente.</p>
+                      <p className="text-gray-400 mb-6">Deletar sua conta é uma ação irreversível. Todos os seus dados serão removidos permanentemente.</p>
 
-                    <button
-                      onClick={handleDeleteAccount}
-                      disabled={settingsLoading}
-                      className="bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-bold py-2 px-6 rounded-lg transition flex items-center gap-2"
-                    >
-                      <Trash2 size={18} /> {settingsLoading ? 'Deletando...' : 'Deletar Conta Permanentemente'}
-                    </button>
-                  </div>
+                      <button
+                        onClick={handleDeleteAccount}
+                        disabled={settingsLoading}
+                        className="bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-bold py-2 px-6 rounded-lg transition flex items-center gap-2"
+                      >
+                        <Trash2 size={18} /> {settingsLoading ? 'Deletando...' : 'Deletar Conta Permanentemente'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </>
             )}
@@ -1009,7 +1028,7 @@ export default function App() {
       </div>
 
       {/* UPGRADE MODAL */}
-      {showUpgradeModal && (
+      {showUpgradeModal && !isAdmin && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className={`${card} rounded-2xl p-8 max-w-2xl w-full border border-gray-700`}>
             <h2 className="text-3xl font-bold mb-6 flex items-center gap-2">
