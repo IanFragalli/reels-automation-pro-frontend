@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Copy, Download, Share2, Heart, Zap, Lock, Crown, BarChart3, FileText, Settings, LogOut, Mail, Key, Trash2, AlertCircle, Loader, ExternalLink, Clock, Tag, Lightbulb, TrendingUp } from 'lucide-react';
+import { Copy, Download, Share2, Heart, Zap, Lock, Crown, BarChart3, FileText, Settings, LogOut, Mail, Key, Trash2, AlertCircle, Loader, ExternalLink, Clock, Tag, Lightbulb, Menu, X, ChevronLeft } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { supabase } from './supabaseClient';
 import Auth from './Auth';
@@ -156,6 +156,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [userProfile, setUserProfile] = useState(null);
   const [showProfileSetup, setShowProfileSetup] = useState(false);
+  const [profileCompleted, setProfileCompleted] = useState(false);
   
   const [niche, setNiche] = useState('');
   const [scripts, setScripts] = useState([]);
@@ -170,6 +171,7 @@ export default function App() {
   const [creditsUsed, setCreditsUsed] = useState(0);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [currentPage, setCurrentPage] = useState('scripts');
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   
   const [settingsForm, setSettingsForm] = useState({
     fullName: '',
@@ -223,7 +225,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (user) {
+    if (user && profileCompleted) {
       if (isAdmin) {
         setPlan('top');
         setCreditsUsed(0);
@@ -234,7 +236,7 @@ export default function App() {
       loadCreditsUsed();
       loadAnalytics();
     }
-  }, [user, isAdmin]);
+  }, [user, isAdmin, profileCompleted]);
 
   const loadUserProfile = async (userId) => {
     try {
@@ -247,15 +249,19 @@ export default function App() {
       if (data) {
         setUserProfile(data);
         setShowProfileSetup(false);
+        setProfileCompleted(true);
       } else if (err && err.code === 'PGRST116') {
         setShowProfileSetup(true);
+        setProfileCompleted(false);
       } else {
         console.error('Erro ao carregar perfil:', err);
         setShowProfileSetup(true);
+        setProfileCompleted(false);
       }
     } catch (err) {
       console.error('Erro ao carregar perfil:', err);
       setShowProfileSetup(true);
+      setProfileCompleted(false);
     }
   };
 
@@ -419,17 +425,27 @@ export default function App() {
       return [];
     }
 
-    const referenceURLs = {
-      instagram: 'https://instagram.com/explore/tags/' + scriptTitle.replace(/\s+/g, ''),
-      youtube: 'https://youtube.com/search?q=' + scriptTitle,
-      tiktok: 'https://www.tiktok.com/search?q=' + scriptTitle
-    };
+    const cleanTitle = scriptTitle.replace(/\s+/g, '').slice(0, 30);
+    
+    const referenceURLs = [
+      {
+        platform: 'instagram',
+        url: `https://instagram.com/explore/tags/${cleanTitle}`,
+        emoji: '📷'
+      },
+      {
+        platform: 'youtube',
+        url: `https://youtube.com/search?q=${encodeURIComponent(scriptTitle)}`,
+        emoji: '🎥'
+      },
+      {
+        platform: 'tiktok',
+        url: `https://www.tiktok.com/search?q=${encodeURIComponent(scriptTitle)}`,
+        emoji: '🎵'
+      }
+    ];
 
-    return Object.entries(referenceURLs).map(([platform, url]) => ({
-      platform,
-      url,
-      emoji: platform === 'instagram' ? '📷' : platform === 'youtube' ? '🎥' : '🎵'
-    }));
+    return referenceURLs;
   };
 
   const estimateVideoDuration = (script, userPlan) => {
@@ -678,6 +694,7 @@ export default function App() {
     setScripts([]);
     setHistory([]);
     setCurrentPage('scripts');
+    setShowMobileMenu(false);
   };
 
   const bg = darkMode 
@@ -707,21 +724,25 @@ export default function App() {
     return <Auth onAuthSuccess={() => setUser(true)} />;
   }
 
-  if (showProfileSetup) {
+  if (showProfileSetup && !profileCompleted) {
     return (
       <ProfileSetup 
         user={user} 
         darkMode={darkMode} 
         onComplete={async (profileData) => {
           try {
-            await supabase.from('user_profiles').insert([
+            const { error } = await supabase.from('user_profiles').insert([
               {
                 user_id: user.id,
                 ...profileData
               }
             ]);
+
+            if (error) throw error;
+
             await loadUserProfile(user.id);
             setShowProfileSetup(false);
+            setProfileCompleted(true);
             setCurrentPage('scripts');
             setSuccess('✅ Perfil criado com sucesso!');
           } catch (err) {
@@ -750,7 +771,7 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-4 flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
             <div className="text-4xl">🎬</div>
-            <div>
+            <div className="hidden sm:block">
               <h1 className="text-2xl md:text-3xl font-black bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
                 ReelFlow
               </h1>
@@ -796,12 +817,19 @@ export default function App() {
             >
               <LogOut size={16} className="hidden md:block" /> Sair
             </button>
+
+            <button
+              onClick={() => setShowMobileMenu(!showMobileMenu)}
+              className={`lg:hidden p-2 rounded-full transition ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-blue-100'}`}
+            >
+              {showMobileMenu ? <X size={20} /> : <Menu size={20} />}
+            </button>
           </div>
         </div>
       </header>
 
       <div className="flex min-h-screen flex-col lg:flex-row">
-        <aside className={`${card} border-b lg:border-r ${darkMode ? 'border-gray-700' : 'border-blue-100'} w-full lg:w-80 p-4 md:p-6 hidden lg:block overflow-y-auto`}>
+        <aside className={`${card} border-b lg:border-r ${darkMode ? 'border-gray-700' : 'border-blue-100'} w-full lg:w-80 p-4 md:p-6 ${showMobileMenu ? 'block' : 'hidden'} lg:block overflow-y-auto max-h-[calc(100vh-80px)]`}>
           <div className="flex flex-col gap-2 mb-6 space-y-2">
             {[
               { id: 'scripts', label: 'Scripts', icon: '📝' },
@@ -810,7 +838,10 @@ export default function App() {
             ].map(nav => (
               <button
                 key={nav.id}
-                onClick={() => setCurrentPage(nav.id)}
+                onClick={() => {
+                  setCurrentPage(nav.id);
+                  setShowMobileMenu(false);
+                }}
                 className={`py-3 px-4 rounded-xl font-bold text-sm transition transform hover:scale-105 ${
                   currentPage === nav.id
                     ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg'
@@ -851,7 +882,10 @@ export default function App() {
 
             {!isAdmin && plan !== 'top' && (
               <button
-                onClick={() => setShowUpgradeModal(true)}
+                onClick={() => {
+                  setShowUpgradeModal(true);
+                  setShowMobileMenu(false);
+                }}
                 className="w-full py-2 bg-white text-gray-900 rounded-lg font-bold text-sm hover:bg-gray-100 transition transform hover:scale-105"
               >
                 ⬆️ Upgrade
@@ -872,7 +906,10 @@ export default function App() {
                     {history.map((h, i) => (
                       <button
                         key={i}
-                        onClick={() => setNiche(h.niche)}
+                        onClick={() => {
+                          setNiche(h.niche);
+                          setShowMobileMenu(false);
+                        }}
                         className={`w-full text-left p-3 rounded-lg transition transform hover:scale-105 ${
                           darkMode 
                             ? 'hover:bg-gray-700' 
@@ -1208,6 +1245,29 @@ export default function App() {
                     <p className={`text-sm mt-2 ${darkMode ? 'text-gray-500' : 'text-blue-500'}`}>
                       Crie scripts virais incríveis em segundos!
                     </p>
+
+                    {history.length > 0 && (
+                      <div className="mt-8 pt-8 border-t border-gray-600">
+                        <p className={`text-xs uppercase font-bold mb-4 ${darkMode ? 'text-gray-400' : 'text-blue-600'}`}>
+                          📌 Buscar do histórico
+                        </p>
+                        <div className="flex gap-2 flex-wrap justify-center">
+                          {history.map((h, i) => (
+                            <button
+                              key={i}
+                              onClick={() => setNiche(h.niche)}
+                              className={`px-4 py-2 rounded-lg text-sm font-bold transition transform hover:scale-105 ${
+                                darkMode
+                                  ? 'bg-gray-700 hover:bg-gray-600'
+                                  : 'bg-blue-100 hover:bg-blue-200 text-blue-900'
+                              }`}
+                            >
+                              {h.niche}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </>
