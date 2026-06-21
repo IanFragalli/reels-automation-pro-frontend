@@ -39,12 +39,23 @@ export default function App() {
 
       if (data.success && data.scripts.length > 0) {
         setScripts(data.scripts);
-        const newHistory = [
-          { niche, timestamp: new Date().toLocaleString() },
-          ...history
-        ].slice(0, 5);
-        setHistory(newHistory);
-        localStorage.setItem('reel_history', JSON.stringify(newHistory));
+        // Salvar scripts no Supabase
+      if (user) {
+        for (const script of data.scripts) {
+          await supabase.from('scripts').insert({
+            user_id: user.id,
+            niche,
+            titulo: script.titulo,
+            gancho: script.gancho,
+            desenvolvimento: script.desenvolvimento,
+            cta: script.cta,
+            duracao: script.duracao,
+            dificuldade: script.dificuldade
+          });
+        }
+      }
+
+      setScripts(data.scripts);
       } else {
         setError('Nenhum script gerado');
       }
@@ -92,8 +103,53 @@ export default function App() {
     return <div className="bg-gray-900 text-white min-h-screen flex items-center justify-center">Carregando...</div>;
   }
 
-  if (!user) {
+  if (user) {
     return <Auth onAuthSuccess={() => setUser(true)} />;
+    loadScriptsFromSupabase();
+  }
+}, [user]);
+
+const toggleFavorite = async (scriptTitle) => {
+  if (!user) return;
+  
+  const { error } = await supabase
+    .from('scripts')
+    .update({ is_favorite: !favorites.includes(scriptTitle) })
+    .eq('titulo', scriptTitle)
+    .eq('user_id', user.id);
+
+  setFavorites(prev => 
+    prev.includes(scriptTitle) 
+      ? prev.filter(f => f !== scriptTitle)
+      : [...prev, scriptTitle]
+  );
+};
+
+const loadScriptsFromSupabase = async () => {
+  const { data, error } = await supabase
+    .from('scripts')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
+    .limit(10);
+
+  if (data) {
+    const historyData = [];
+    const nicheMap = {};
+    
+    data.forEach(script => {
+      if (!nicheMap[script.niche]) {
+        nicheMap[script.niche] = {
+          niche: script.niche,
+          timestamp: new Date(script.created_at).toLocaleString()
+        };
+        historyData.push(nicheMap[script.niche]);
+      }
+    });
+    
+    setHistory(historyData);
+  }
+};
   }
 
   return (

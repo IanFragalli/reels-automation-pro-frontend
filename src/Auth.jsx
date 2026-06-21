@@ -25,6 +25,9 @@ export default function Auth({ onAuthSuccess }) {
         const { data, error: signInError } = await supabase.auth.signInWithPassword({
           email,
           password,
+          options: {
+           emailRedirectTo: 'https://reels-automation-pro-frontend.vercel.app'
+          }
         });
         if (signInError) throw signInError;
         onAuthSuccess();
